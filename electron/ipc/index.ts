@@ -9,6 +9,7 @@ import { registerProxyHandlers } from './proxy'
 import { registerDbHandlers } from './db'
 import { registerCommandHandlers } from './command'
 import { registerNpmHandlers } from './npm-refactored'
+import { registerYarnHandlers } from './yarn-refactored'
 
 /**
  * 注册所有 IPC 处理函数
@@ -40,6 +41,10 @@ export function registerAllHandlers(mainWindow: BrowserWindow | null) {
   // npm 专用功能
   registerNpmHandlers()
   console.log('[IPC] ✓ npm 专用功能')
+
+  // yarn 专用功能
+  registerYarnHandlers()
+  console.log('[IPC] ✓ yarn 专用功能')
 
   console.log('[IPC] 所有 IPC 处理函数注册完成！')
 }

@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { NTag, NButton, NSpin, NModal, NForm, NFormItem, NInput, NDataTable, NSelect, NTabs, NTabPane, NCard, NSpace, NRadio, NRadioGroup, NText, NProgress, NStatistic, NDivider, NAlert, NOl, NLi, NCode, useMessage, useDialog } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { ToolInfo } from '../types'
+import NpmConfigModal from '../components/tools/npm/NpmConfigModal.vue'
+import YarnConfigModal from '../components/tools/yarn/YarnConfigModal.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -37,6 +39,12 @@ const npmCacheLoading = ref(false)
 // npm 状态
 const npmStatus = ref<any>(null)
 const npmStatusLoading = ref(false)
+
+// yarn 专用状态
+const yarnCacheInfo = ref<{ cachePath: string; sizeFormatted: string; sizeInBytes: number } | null>(null)
+const yarnCacheLoading = ref(false)
+const yarnStatus = ref<any>(null)
+const yarnStatusLoading = ref(false)
 
 // 提取版本号
 function extractVersion(versionString: string): string {
@@ -610,6 +618,75 @@ async function clearAllGlobalConfig() {
       }
     }
   })
+}
+
+// ============================================
+// yarn 专用功能
+// ============================================
+
+// 获取 yarn 缓存信息
+async function loadYarnCacheInfo() {
+  if (!window.electronAPI) return
+  
+  try {
+    yarnCacheLoading.value = true
+    const result = await window.electronAPI.invoke('yarn:getCacheInfo')
+    
+    if (result.success) {
+      yarnCacheInfo.value = {
+        cachePath: result.cachePath,
+        sizeFormatted: result.sizeFormatted,
+        sizeInBytes: result.sizeInBytes
+      }
+    } else {
+      message.error('获取缓存信息失败: ' + result.message)
+    }
+  } catch (error) {
+    message.error('获取缓存信息失败: ' + error)
+  } finally {
+    yarnCacheLoading.value = false
+  }
+}
+
+// 清理 yarn 缓存
+async function cleanYarnCache() {
+  if (!window.electronAPI) return
+  
+  try {
+    yarnCacheLoading.value = true
+    const result = await window.electronAPI.invoke('yarn:cleanCache')
+    
+    if (result.success) {
+      message.success(result.message)
+      // 重新加载缓存信息
+      await loadYarnCacheInfo()
+    } else {
+      message.error('清理缓存失败: ' + result.message)
+    }
+  } catch (error) {
+    message.error('清理缓存失败: ' + error)
+  } finally {
+    yarnCacheLoading.value = false
+  }
+}
+
+// 获取 yarn 状态
+async function getYarnStatus() {
+  if (!window.electronAPI) return
+  
+  try {
+    yarnStatusLoading.value = true
+    const result = await window.electronAPI.invoke('yarn:getStatus')
+    
+    if (result.success) {
+      yarnStatus.value = result.data
+      console.log('[getYarnStatus] 状态:', result.data)
+    }
+  } catch (error) {
+    console.error('获取 yarn 状态失败:', error)
+  } finally {
+    yarnStatusLoading.value = false
+  }
 }
 
 

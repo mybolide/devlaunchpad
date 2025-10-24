@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景：深邃星空 -->
+  <circle cx="100" cy="100" r="95" fill="url(#starBg)"/>
+  
+  <!-- 渐变定义 -->
+  <defs>
+    <!-- 星空背景渐变 -->
+    <linearGradient id="starBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f23;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1a1a3e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f0f23;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 主星光晕 -->
+    <radialGradient id="mainStarGlow">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#f59e0b;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:0" />
+    </radialGradient>
+    
+    <!-- 小星光晕 -->
+    <radialGradient id="smallStarGlow">
+      <stop offset="0%" style="stop-color:#e0e7ff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#c7d2fe;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#a5b4fc;stop-opacity:0" />
+    </radialGradient>
+    
+    <!-- 星光滤镜 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景星点装饰 -->
+  <circle cx="25" cy="35" r="0.8" fill="white" opacity="0.6"/>
+  <circle cx="180" cy="45" r="0.6" fill="white" opacity="0.5"/>
+  <circle cx="30" cy="170" r="0.7" fill="white" opacity="0.4"/>
+  <circle cx="175" cy="160" r="0.6" fill="white" opacity="0.5"/>
+  <circle cx="40" cy="100" r="0.5" fill="white" opacity="0.4"/>
+  <circle cx="160" cy="90" r="0.5" fill="white" opacity="0.4"/>
+  <circle cx="50" cy="140" r="0.6" fill="white" opacity="0.5"/>
+  
+  <!-- 北斗七星连线（勺子形状） -->
+  <path d="M85,65 L105,60 L120,75 L125,95 L130,110 L140,125 L155,135" 
+        stroke="#6366f1" 
+        stroke-width="1" 
+        fill="none" 
+        opacity="0.4"
+        stroke-linecap="round"/>
+  
+  <!-- 北斗七星 -->
+  
+  <!-- 斗口 -->
+  <!-- 第一星：天枢 -->
+  <g transform="translate(85, 65)">
+    <circle r="12" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="4" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2.5" fill="white"/>
+    <!-- 四芒星光 -->
+    <path d="M0,-7 L0.8,-2.5 L0,0 L-0.8,-2.5 Z" fill="white" opacity="0.9"/>
+    <path d="M0,7 L0.8,2.5 L0,0 L-0.8,2.5 Z" fill="white" opacity="0.9"/>
+    <path d="M-7,0 L-2.5,0.8 L0,0 L-2.5,-0.8 Z" fill="white" opacity="0.9"/>
+    <path d="M7,0 L2.5,0.8 L0,0 L2.5,-0.8 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 第二星：天璇 -->
+  <g transform="translate(105, 60)">
+    <circle r="12" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="4" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2.5" fill="white"/>
+    <path d="M0,-7 L0.8,-2.5 L0,0 L-0.8,-2.5 Z" fill="white" opacity="0.9"/>
+    <path d="M0,7 L0.8,2.5 L0,0 L-0.8,2.5 Z" fill="white" opacity="0.9"/>
+    <path d="M-7,0 L-2.5,0.8 L0,0 L-2.5,-0.8 Z" fill="white" opacity="0.9"/>
+    <path d="M7,0 L2.5,0.8 L0,0 L2.5,-0.8 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 斗身 -->
+  <!-- 第三星：天玑 -->
+  <g transform="translate(120, 75)">
+    <circle r="11" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="3.5" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2.2" fill="white"/>
+    <path d="M0,-6 L0.7,-2.2 L0,0 L-0.7,-2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M0,6 L0.7,2.2 L0,0 L-0.7,2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M-6,0 L-2.2,0.7 L0,0 L-2.2,-0.7 Z" fill="white" opacity="0.9"/>
+    <path d="M6,0 L2.2,0.7 L0,0 L2.2,-0.7 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 第四星：天权 -->
+  <g transform="translate(125, 95)">
+    <circle r="11" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="3.5" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2.2" fill="white"/>
+    <path d="M0,-6 L0.7,-2.2 L0,0 L-0.7,-2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M0,6 L0.7,2.2 L0,0 L-0.7,2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M-6,0 L-2.2,0.7 L0,0 L-2.2,-0.7 Z" fill="white" opacity="0.9"/>
+    <path d="M6,0 L2.2,0.7 L0,0 L2.2,-0.7 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 斗柄 -->
+  <!-- 第五星：玉衡 -->
+  <g transform="translate(130, 110)">
+    <circle r="11" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="3.5" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2.2" fill="white"/>
+    <path d="M0,-6 L0.7,-2.2 L0,0 L-0.7,-2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M0,6 L0.7,2.2 L0,0 L-0.7,2.2 Z" fill="white" opacity="0.9"/>
+    <path d="M-6,0 L-2.2,0.7 L0,0 L-2.2,-0.7 Z" fill="white" opacity="0.9"/>
+    <path d="M6,0 L2.2,0.7 L0,0 L2.2,-0.7 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 第六星：开阳 -->
+  <g transform="translate(140, 125)">
+    <circle r="10" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="3.2" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2" fill="white"/>
+    <path d="M0,-5.5 L0.6,-2 L0,0 L-0.6,-2 Z" fill="white" opacity="0.9"/>
+    <path d="M0,5.5 L0.6,2 L0,0 L-0.6,2 Z" fill="white" opacity="0.9"/>
+    <path d="M-5.5,0 L-2,0.6 L0,0 L-2,-0.6 Z" fill="white" opacity="0.9"/>
+    <path d="M5.5,0 L2,0.6 L0,0 L2,-0.6 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 第七星：摇光 -->
+  <g transform="translate(155, 135)">
+    <circle r="10" fill="url(#smallStarGlow)" opacity="0.3"/>
+    <circle r="3.2" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle r="2" fill="white"/>
+    <path d="M0,-5.5 L0.6,-2 L0,0 L-0.6,-2 Z" fill="white" opacity="0.9"/>
+    <path d="M0,5.5 L0.6,2 L0,0 L-0.6,2 Z" fill="white" opacity="0.9"/>
+    <path d="M-5.5,0 L-2,0.6 L0,0 L-2,-0.6 Z" fill="white" opacity="0.9"/>
+    <path d="M5.5,0 L2,0.6 L0,0 L2,-0.6 Z" fill="white" opacity="0.9"/>
+  </g>
+  
+  <!-- 第八星：天闲星君（中心主星，金色，更大更亮） -->
+  <g transform="translate(100, 100)">
+    <!-- 外层光晕 -->
+    <circle r="35" fill="url(#mainStarGlow)" opacity="0.25"/>
+    <circle r="25" fill="url(#mainStarGlow)" opacity="0.35"/>
+    <circle r="18" fill="url(#mainStarGlow)" opacity="0.5"/>
+    
+    <!-- 主星核心 -->
+    <circle r="9" fill="#fbbf24" filter="url(#glow)"/>
+    <circle r="7" fill="#fcd34d"/>
+    <circle r="4" fill="#fef3c7"/>
+    <circle r="2" fill="white"/>
+    
+    <!-- 八芒星光（更长更明显） -->
+    <path d="M0,-15 L1.8,-5 L0,-2 L-1.8,-5 Z" fill="white" opacity="0.95"/>
+    <path d="M0,15 L1.8,5 L0,2 L-1.8,5 Z" fill="white" opacity="0.95"/>
+    <path d="M-15,0 L-5,1.8 L-2,0 L-5,-1.8 Z" fill="white" opacity="0.95"/>
+    <path d="M15,0 L5,1.8 L2,0 L5,-1.8 Z" fill="white" opacity="0.95"/>
+    
+    <!-- 斜向星光 -->
+    <path d="M-10.6,-10.6 L-3.7,-3.7 L-1.4,-1.4 L-3.7,-1.4 Z" fill="white" opacity="0.9" transform="rotate(0 0 0)"/>
+    <path d="M10.6,10.6 L3.7,3.7 L1.4,1.4 L3.7,1.4 Z" fill="white" opacity="0.9" transform="rotate(0 0 0)"/>
+    <path d="M-10.6,10.6 L-3.7,3.7 L-1.4,1.4 L-1.4,3.7 Z" fill="white" opacity="0.9" transform="rotate(0 0 0)"/>
+    <path d="M10.6,-10.6 L3.7,-3.7 L1.4,-1.4 L1.4,-3.7 Z" fill="white" opacity="0.9" transform="rotate(0 0 0)"/>
+    
+    <!-- 内环装饰 -->
+    <circle r="12" stroke="#fef3c7" stroke-width="0.5" fill="none" opacity="0.4"/>
+  </g>
+  
+  <!-- 文字标注（可选） -->
+  <text x="100" y="180" text-anchor="middle" font-family="'KaiTi', 'STKaiti', serif" font-size="12" fill="#fbbf24" opacity="0.8">天闲</text>
+  
+  <!-- 流星装饰 -->
+  <path d="M35,30 Q40,35 43,40" stroke="url(#smallStarGlow)" stroke-width="1" fill="none" opacity="0.4"/>
+  <circle cx="35" cy="30" r="1" fill="white" opacity="0.6"/>
+  
+  <path d="M170,170 Q165,165 162,160" stroke="url(#smallStarGlow)" stroke-width="1" fill="none" opacity="0.4"/>
+  <circle cx="170" cy="170" r="1" fill="white" opacity="0.6"/>
+</svg>

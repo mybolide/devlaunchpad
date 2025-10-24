@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="600" height="120" viewBox="0 0 600 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="iconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f23;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a1a3e;stop-opacity:1" />
+    </linearGradient>
+    
+    <radialGradient id="mainStar">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="60%" style="stop-color:#f59e0b;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:0" />
+    </radialGradient>
+    
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Logo 图标 -->
+  <g transform="translate(20, 20)">
+    <circle cx="40" cy="40" r="38" fill="url(#iconBg)"/>
+    
+    <!-- 北斗七星连线 -->
+    <path d="M28,30 L45,28 L52,35 L54,44 L56,50 L60,57 L67,62" 
+          stroke="#6366f1" 
+          stroke-width="0.6" 
+          fill="none" 
+          opacity="0.4"
+          stroke-linecap="round"/>
+    
+    <!-- 北斗七星 -->
+    <circle cx="28" cy="30" r="2" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="45" cy="28" r="2" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="52" cy="35" r="1.8" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="54" cy="44" r="1.8" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="56" cy="50" r="1.8" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="60" cy="57" r="1.5" fill="#e0e7ff" filter="url(#glow)"/>
+    <circle cx="67" cy="62" r="1.5" fill="#e0e7ff" filter="url(#glow)"/>
+    
+    <!-- 天闲星君（中心金色） -->
+    <circle cx="40" cy="40" r="12" fill="url(#mainStar)" opacity="0.3"/>
+    <circle cx="40" cy="40" r="5" fill="#fbbf24" filter="url(#glow)"/>
+    <circle cx="40" cy="40" r="3.5" fill="#fcd34d"/>
+    <circle cx="40" cy="40" r="2" fill="#fef3c7"/>
+    <circle cx="40" cy="40" r="1" fill="white"/>
+    
+    <!-- 星光 -->
+    <path d="M40,33 L40.8,37.5 L40,39 L39.2,37.5 Z" fill="white" opacity="0.95"/>
+    <path d="M40,47 L40.8,42.5 L40,41 L39.2,42.5 Z" fill="white" opacity="0.95"/>
+    <path d="M33,40 L37.5,40.8 L39,40 L37.5,39.2 Z" fill="white" opacity="0.95"/>
+    <path d="M47,40 L42.5,40.8 L41,40 L42.5,39.2 Z" fill="white" opacity="0.95"/>
+  </g>
+  
+  <!-- 天闲 -->
+  <text x="110" y="55" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="36" font-weight="bold" fill="url(#textGradient)">天闲</text>
+  
+  <!-- 竖线分隔 -->
+  <rect x="210" y="25" width="3" height="45" fill="#6366f1" opacity="0.3"/>
+  
+  <!-- DevLaunchpad -->
+  <text x="230" y="55" font-family="'Arial', 'Helvetica', sans-serif" font-size="32" font-weight="600" fill="#6366f1">DevLaunchpad</text>
+  
+  <!-- 副标题 -->
+  <text x="110" y="85" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="16" fill="#888">开发者工具配置管理器 · 北斗第八星</text>
+</svg>

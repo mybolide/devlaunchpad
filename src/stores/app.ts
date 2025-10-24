@@ -11,6 +11,9 @@ export const useAppStore = defineStore('app', () => {
   // 侧边栏折叠状态
   const sidebarCollapsed = ref(false)
   
+  // 窗口最大化状态
+  const isMaximized = ref(false)
+  
   // 测试计数器
   const count = ref(0)
   
@@ -22,13 +25,19 @@ export const useAppStore = defineStore('app', () => {
     sidebarCollapsed.value = !sidebarCollapsed.value
   }
   
+  function setMaximized(value: boolean) {
+    isMaximized.value = value
+  }
+  
   return {
     appName,
     author,
     sidebarCollapsed,
+    isMaximized,
     count,
     increment,
-    toggleSidebar
+    toggleSidebar,
+    setMaximized
   }
 })
 

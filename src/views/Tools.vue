@@ -1,17 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, h } from 'vue'
-import { NTag, NButton, NSpin, NModal, NForm, NFormItem, NInput, NDataTable, NSelect, NTabs, NTabPane, NCard, NSpace, NRadio, NRadioGroup, useMessage } from 'naive-ui'
+import { NTag, NButton, NSpin, NModal, NForm, NFormItem, NInput, NDataTable, NSelect, NTabs, NTabPane, NCard, NSpace, NRadio, NRadioGroup, NText, NProgress, NStatistic, NDivider, NAlert, NOl, NLi, NCode, useMessage, useDialog } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { ToolInfo } from '../types'
 
-// 声明全局类型
-declare global {
-  interface Window {
-    electronAPI: any
-  }
-}
-
 const message = useMessage()
+const dialog = useDialog()
 
 // 状态
 const loadingCategory = ref<string>('')
@@ -30,6 +24,19 @@ const configForm = ref({
   cacheDir: ''
 })
 const availableMirrors = ref<any[]>([])
+const configLoading = ref(false) // 加载配置时的 loading
+const savingConfig = ref(false) // 保存配置时的 loading
+const activeConfigTab = ref('registry') // 当前激活的配置 tab
+
+// npm 专用状态
+const npmPingLoading = ref(false)
+const npmPingResult = ref<{ success: boolean; duration: number; message: string } | null>(null)
+const npmCacheInfo = ref<{ cachePath: string; sizeFormatted: string; sizeInBytes: number } | null>(null)
+const npmCacheLoading = ref(false)
+
+// npm 状态
+const npmStatus = ref<any>(null)
+const npmStatusLoading = ref(false)
 
 // 提取版本号
 function extractVersion(versionString: string): string {
@@ -431,26 +438,49 @@ async function openToolConfig(toolName: string) {
   const tool = tools.value.find(t => t.name === toolName)
   if (!tool || tool.status !== 'installed') return
   
-  // 临时镜像源列表（TODO: 从 tools-config 获取）
-  availableMirrors.value = [
-    { name: 'npmmirror', displayName: '阿里云', url: 'https://registry.npmmirror.com', location: '中国' },
-    { name: 'tencent', displayName: '腾讯云', url: 'https://mirrors.cloud.tencent.com/npm', location: '中国' },
-    { name: 'npmjs', displayName: '官方源', url: 'https://registry.npmjs.org', location: '美国' }
-  ]
-  
-  // 从数据库读取用户保存的配置
-  const savedConfig = await window.electronAPI.db.getToolConfig(toolName)
-  
-  // chsrc 原理：使用命令读取的实际配置作为初始值
-  configForm.value = {
-    registry: tool.registryUrl || '',  // 从命令读取的实际值
-    selectedMirror: savedConfig?.registry_url ? '' : '',
-    proxyType: (savedConfig?.proxy_type as any) || (tool.proxyEnabled ? 'custom' : 'none'),
-    customProxy: tool.currentProxy || '',  // 从命令读取的实际值
-    cacheDir: tool.cacheDir || ''  // 从命令读取的实际值
-  }
-  
+  // 先显示弹窗，然后加载数据
   showConfigModal.value = true
+  configLoading.value = true
+  
+  try {
+    // 临时镜像源列表（TODO: 从 tools-config 获取）
+    availableMirrors.value = tool.mirrors || [
+      { name: 'npmmirror', displayName: '阿里云', url: 'https://registry.npmmirror.com', location: '中国' },
+      { name: 'tencent', displayName: '腾讯云', url: 'https://mirrors.cloud.tencent.com/npm', location: '中国' },
+      { name: 'npmjs', displayName: '官方源', url: 'https://registry.npmjs.org', location: '美国' }
+    ]
+    
+    // 从数据库读取用户保存的配置
+    const savedConfig = await window.electronAPI.db.getToolConfig(toolName)
+    
+    // chsrc 原理：使用命令读取的实际配置作为初始值
+    configForm.value = {
+      registry: tool.registryUrl || '',  // 从命令读取的实际值
+      selectedMirror: savedConfig?.registry_url ? '' : '',
+      proxyType: (savedConfig?.proxy_type as any) || (tool.proxyEnabled ? 'custom' : 'none'),
+      customProxy: tool.currentProxy || '',  // 从命令读取的实际值
+      cacheDir: tool.cacheDir || ''  // 从命令读取的实际值
+    }
+    
+    // 立即结束 loading，让用户看到表单
+    configLoading.value = false
+    
+    // 如果是 npm 工具，后台异步加载专用信息（不阻塞）
+    if (toolName === 'npm') {
+      npmPingResult.value = null
+      // 异步加载，不等待
+      Promise.all([
+        loadNpmCacheInfo(),
+        getNpmStatus()
+      ]).catch(error => {
+        console.error('加载 npm 额外信息失败:', error)
+      })
+    }
+  } catch (error) {
+    console.error('加载配置失败:', error)
+    message.error('加载配置失败')
+    configLoading.value = false
+  }
 }
 
 // 镜像源选择改变
@@ -461,56 +491,352 @@ function onMirrorChange(mirrorName: string) {
   }
 }
 
+// ============================================
+// npm 专用功能
+// ============================================
+
+// npm ping 测速
+async function npmPingTest(registryUrl?: string) {
+  if (!window.electronAPI) return
+  
+  try {
+    npmPingLoading.value = true
+    npmPingResult.value = null
+    
+    const result = await window.electronAPI.invoke('npm:testRegistry', registryUrl)
+    npmPingResult.value = result
+    
+    if (result.success) {
+      message.success(`测速成功：${result.duration}ms`)
+    } else {
+      message.error(`测速失败：${result.message}`)
+    }
+  } catch (error) {
+    message.error('测速失败: ' + error)
+  } finally {
+    npmPingLoading.value = false
+  }
+}
+
+// 获取 npm 缓存信息
+async function loadNpmCacheInfo() {
+  if (!window.electronAPI) return
+  
+  try {
+    npmCacheLoading.value = true
+    const result = await window.electronAPI.invoke('npm:getCacheInfo')
+    
+    if (result.success) {
+      npmCacheInfo.value = {
+        cachePath: result.cachePath,
+        sizeFormatted: result.sizeFormatted,
+        sizeInBytes: result.sizeInBytes
+      }
+    } else {
+      message.error('获取缓存信息失败: ' + result.message)
+    }
+  } catch (error) {
+    message.error('获取缓存信息失败: ' + error)
+  } finally {
+    npmCacheLoading.value = false
+  }
+}
+
+// 清理 npm 缓存
+async function cleanNpmCache() {
+  if (!window.electronAPI) return
+  
+  try {
+    npmCacheLoading.value = true
+    const result = await window.electronAPI.invoke('npm:cleanCache')
+    
+    if (result.success) {
+      message.success(result.message)
+      // 重新加载缓存信息
+      await loadNpmCacheInfo()
+    } else {
+      message.error('清理缓存失败: ' + result.message)
+    }
+  } catch (error) {
+    message.error('清理缓存失败: ' + error)
+  } finally {
+    npmCacheLoading.value = false
+  }
+}
+
+// 获取 npm 状态
+async function getNpmStatus() {
+  if (!window.electronAPI) return
+  
+  try {
+    npmStatusLoading.value = true
+    const result = await window.electronAPI.invoke('npm:getStatus')
+    
+    if (result.success) {
+      npmStatus.value = result.data
+      console.log('[getNpmStatus] 状态:', result.data)
+    }
+  } catch (error) {
+    console.error('获取 npm 状态失败:', error)
+  } finally {
+    npmStatusLoading.value = false
+  }
+}
+
+// 一键清空 global 配置
+async function clearAllGlobalConfig() {
+  if (!window.electronAPI) return
+  
+  dialog.warning({
+    title: '确认清空',
+    content: '将清空所有 npm global 配置，让 user 配置接管。是否继续？',
+    positiveText: '清空',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const result = await window.electronAPI.invoke('npm:clearAllGlobalConfig')
+        
+        if (result.success) {
+          message.success(result.message || 'Global 配置已清空')
+          // 刷新状态
+          await getNpmStatus()
+          // 刷新工具信息
+          await refreshToolInfo('npm')
+        } else {
+          message.error(result.message || '清空失败')
+        }
+      } catch (error) {
+        message.error('清空 global 配置失败: ' + error)
+      }
+    }
+  })
+}
+
+
 // 保存工具配置
 async function saveToolConfig() {
   if (!window.electronAPI) return
   
+  // 防止重复点击
+  if (savingConfig.value) {
+    message.warning('正在保存配置，请稍候...')
+    return
+  }
+  
+  savingConfig.value = true
+  
   try {
+    // 根据当前 tab 决定要保存哪些配置
     const config = {
       tool_name: selectedTool.value,
-      registry_url: configForm.value.registry,
-      cache_dir: configForm.value.cacheDir,
-      proxy_type: configForm.value.proxyType,
-      custom_proxy: configForm.value.customProxy
+      registry_url: activeConfigTab.value === 'registry' ? configForm.value.registry : undefined,
+      cache_dir: activeConfigTab.value === 'cache' ? configForm.value.cacheDir : undefined,
+      proxy_type: activeConfigTab.value === 'proxy' ? configForm.value.proxyType : undefined,
+      custom_proxy: activeConfigTab.value === 'proxy' ? configForm.value.customProxy : undefined
     }
     
-    // 保存到 JSON 配置文件
+    // 保存到 JSON 配置文件（只保存当前 tab 相关的配置）
     await window.electronAPI.db.saveToolConfig(config)
     
-    // chsrc 原理：执行命令设置配置
-    // 1. 设置镜像源
-    if (configForm.value.registry) {
-      message.info(`设置镜像源: ${truncateText(configForm.value.registry, 40)}`)
-      // TODO: 调用后端 API - npm config set registry xxx
-    }
-    
-    // 2. 设置代理
-    if (configForm.value.proxyType === 'global') {
-      const globalProxy = getGlobalProxyUrl()
-      if (globalProxy) {
-        await window.electronAPI.proxy.enable(selectedTool.value, globalProxy)
-        message.success('已启用全局代理')
+    // 根据当前 tab 执行对应的配置操作
+    if (activeConfigTab.value === 'registry') {
+      // 1. 设置镜像源
+      if (configForm.value.registry && configForm.value.registry.trim()) {
+        const registryUrl = configForm.value.registry.trim()
+        
+        // 验证 URL 格式
+        if (!registryUrl.startsWith('http://') && !registryUrl.startsWith('https://')) {
+          message.error('镜像源地址必须以 http:// 或 https:// 开头')
+          savingConfig.value = false
+          return
+        }
+        
+        console.log('[saveToolConfig] 准备设置镜像源:', registryUrl)
+        message.info(`正在设置镜像源: ${truncateText(registryUrl, 40)}`)
+        
+        try {
+          let result
+          
+          // npm 使用新的 setRegistry API
+          if (selectedTool.value === 'npm') {
+            console.log('[saveToolConfig] 调用 npm:setRegistry，设置 registry =', registryUrl)
+            result = await window.electronAPI.invoke('npm:setRegistry', registryUrl)
+            console.log('[saveToolConfig] npm:setRegistry 结果:', result)
+            
+            if (result && result.success) {
+              message.success(`✓ 镜像源设置成功: ${truncateText(result.value || registryUrl, 40)}`)
+              // 更新表单显示的值
+              configForm.value.registry = result.value || registryUrl
+              // 后台异步刷新状态（不阻塞）
+              getNpmStatus()
+            } else {
+              console.error('[saveToolConfig] npm:setRegistry 失败:', result)
+              message.error(`镜像源设置失败: ${result?.message || '未知错误'}`)
+              savingConfig.value = false
+              return
+            }
+          } 
+          // yarn 和 pnpm 使用命令行
+          else if (selectedTool.value === 'yarn' || selectedTool.value === 'pnpm') {
+            const cmd = `${selectedTool.value} config set registry "${registryUrl}"`
+            result = await window.electronAPI.invoke('command:execute', cmd)
+            
+            console.log('[saveToolConfig] 执行命令:', cmd)
+            console.log('[saveToolConfig] 执行结果:', result)
+            
+            if (result && result.success === false) {
+              message.error(`镜像源设置失败: ${result.stderr || result.message}`)
+              savingConfig.value = false
+              return
+            }
+            
+            // 等待命令执行完成
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            // 验证设置是否成功
+            const verifyCmd = `${selectedTool.value} config get registry`
+            const verifyResult = await window.electronAPI.invoke('command:execute', verifyCmd)
+            console.log('[saveToolConfig] 验证结果:', verifyResult)
+            
+            if (verifyResult && verifyResult.success && verifyResult.stdout) {
+              const actualRegistry = verifyResult.stdout.trim()
+              const expectedRegistry = registryUrl.replace(/\/$/, '')
+              const actualRegistryClean = actualRegistry.replace(/\/$/, '')
+              
+              console.log('[saveToolConfig] 期望:', expectedRegistry)
+              console.log('[saveToolConfig] 实际:', actualRegistryClean)
+              
+              if (actualRegistryClean === expectedRegistry) {
+                message.success(`✓ 镜像源设置成功: ${truncateText(actualRegistry, 40)}`)
+              } else {
+                message.error(`镜像源设置后验证失败\n期望: ${expectedRegistry}\n实际: ${actualRegistry}`)
+                console.error('[saveToolConfig] 验证失败！')
+                savingConfig.value = false
+                return
+              }
+            } else {
+              message.error('无法验证镜像源设置')
+              savingConfig.value = false
+              return
+            }
+          }
+        } catch (error) {
+          console.error('[saveToolConfig] 异常:', error)
+          message.error('设置镜像源失败: ' + error)
+          savingConfig.value = false
+          return
+        }
       }
-    } else if (configForm.value.proxyType === 'custom' && configForm.value.customProxy) {
-      await window.electronAPI.proxy.enable(selectedTool.value, configForm.value.customProxy)
-      message.success('已启用自定义代理')
-    } else if (configForm.value.proxyType === 'none') {
-      await window.electronAPI.proxy.disable(selectedTool.value)
-      message.success('已禁用代理')
+    } else if (activeConfigTab.value === 'proxy') {
+      // 2. 设置代理
+      if (selectedTool.value === 'npm') {
+      // npm 使用新的 setProxy API
+      let proxyUrl = null
+      if (configForm.value.proxyType === 'global') {
+        proxyUrl = getGlobalProxyUrl()
+      } else if (configForm.value.proxyType === 'custom') {
+        proxyUrl = configForm.value.customProxy
+      }
+      
+      const result = await window.electronAPI.invoke('npm:setProxy', proxyUrl)
+      if (result.success) {
+        message.success(proxyUrl ? '代理已设置' : '代理已清除')
+        // 更新表单显示的值
+        if (proxyUrl) {
+          configForm.value.customProxy = proxyUrl
+        }
+        // 后台异步刷新状态（不阻塞）
+        getNpmStatus()
+      } else {
+        message.error('代理设置失败: ' + result.message)
+      }
+    } else {
+      // 其他工具使用原有逻辑
+      if (configForm.value.proxyType === 'global') {
+        const globalProxy = getGlobalProxyUrl()
+        if (globalProxy) {
+          await window.electronAPI.proxy.enable(selectedTool.value, globalProxy)
+          message.success('已启用全局代理')
+        }
+      } else if (configForm.value.proxyType === 'custom' && configForm.value.customProxy) {
+        await window.electronAPI.proxy.enable(selectedTool.value, configForm.value.customProxy)
+        message.success('已启用自定义代理')
+      } else if (configForm.value.proxyType === 'none') {
+        await window.electronAPI.proxy.disable(selectedTool.value)
+        message.success('已禁用代理')
+      }
+    }
+    } else if (activeConfigTab.value === 'cache') {
+      // 3. 设置缓存目录
+      if (configForm.value.cacheDir && configForm.value.cacheDir.trim()) {
+        const cacheDirPath = configForm.value.cacheDir.trim()
+        message.info(`正在设置缓存目录...`)
+        try {
+          // npm 使用新的 setCacheDir API
+          if (selectedTool.value === 'npm') {
+            const result = await window.electronAPI.invoke('npm:setCacheDir', cacheDirPath)
+            if (result.success) {
+              message.success(`✓ 缓存目录设置成功: ${truncateText(result.value || cacheDirPath, 40)}`)
+              // 更新表单显示的值
+              configForm.value.cacheDir = result.value || cacheDirPath
+              // 后台异步刷新状态和缓存信息（不阻塞）
+              getNpmStatus()
+              loadNpmCacheInfo()
+            } else {
+              message.error(`缓存目录设置失败: ${result.message}`)
+            }
+          } else {
+            // 其他工具使用命令行
+            let result
+            if (selectedTool.value === 'yarn') {
+              result = await window.electronAPI.invoke('command:execute', `yarn config set cache-folder "${cacheDirPath}"`)
+            } else if (selectedTool.value === 'pnpm') {
+              result = await window.electronAPI.invoke('command:execute', `pnpm config set cache-dir "${cacheDirPath}"`)
+            }
+            
+            if (result && result.success === false) {
+              message.error(`缓存目录设置失败: ${result.stderr || result.message}`)
+            } else {
+              // 等待命令执行完成
+              await new Promise(resolve => setTimeout(resolve, 300))
+              
+              // 验证设置是否成功：重新读取配置
+              const verifyCmd = selectedTool.value === 'yarn' ? 'yarn config get cache-folder' :
+                               'pnpm config get cache-dir'
+              
+              const verifyResult = await window.electronAPI.invoke('command:execute', verifyCmd)
+              if (verifyResult && verifyResult.success && verifyResult.stdout) {
+                const actualCacheDir = verifyResult.stdout.trim()
+                // 路径比较（处理反斜杠和正斜杠）
+                const normalizedExpected = cacheDirPath.replace(/\\/g, '/').replace(/\/$/, '')
+                const normalizedActual = actualCacheDir.replace(/\\/g, '/').replace(/\/$/, '')
+                
+                if (normalizedActual === normalizedExpected) {
+                  message.success(`✓ 缓存目录设置成功: ${truncateText(actualCacheDir, 40)}`)
+                } else {
+                  message.warning(`缓存目录设置后验证失败\n期望: ${cacheDirPath}\n实际: ${actualCacheDir}\n⚠️ 可能被环境变量覆盖`)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          message.error('设置缓存目录失败: ' + error)
+        }
+      }
     }
     
-    // 3. 设置缓存目录
-    if (configForm.value.cacheDir) {
-      message.info(`设置缓存目录: ${truncateText(configForm.value.cacheDir, 30)}`)
-      // TODO: 调用后端 API - npm config set cache xxx
-    }
-    
-    showConfigModal.value = false
-    
-    // 刷新工具信息
-    await refreshToolInfo(selectedTool.value)
+    // 不关闭窗口，用户可以继续操作
+    // showConfigModal.value = false
   } catch (error) {
     message.error('保存配置失败: ' + error)
+  } finally {
+    // 立即解除 loading 状态
+    savingConfig.value = false
+    
+    // 异步刷新工具信息（不阻塞保存按钮）
+    if (selectedTool.value) {
+      refreshToolInfo(selectedTool.value)
+    }
   }
 }
 
@@ -612,12 +938,49 @@ onUnmounted(() => {
       v-model:show="showConfigModal"
       :title="`${selectedTool} 配置`"
       style="width: 700px"
+      :mask-closable="!savingConfig"
+      :closable="!savingConfig"
+      :on-update:show="(show: boolean) => { if (!savingConfig) showConfigModal = show }"
     >
       <n-card :bordered="false">
-        <n-tabs type="line" animated>
+        <n-spin :show="configLoading" description="加载配置中...">
+        <n-tabs v-model:value="activeConfigTab" type="line" animated>
           <!-- 镜像源配置 -->
           <n-tab-pane name="registry" tab="📦 镜像源">
             <n-form label-placement="left" label-width="100px" style="margin-top: 12px">
+              <!-- npm 配置状态提示 -->
+              <n-alert 
+                v-if="npmStatus?.hasGlobalConfig || Object.keys(npmStatus?.envVars || {}).length > 0"
+                type="warning" 
+                title="⚠️ 检测到配置问题"
+                style="margin-bottom: 16px"
+              >
+                <n-space vertical size="small">
+                  <template v-if="Object.keys(npmStatus?.envVars || {}).length > 0">
+                    <n-text>检测到环境变量覆盖了配置：</n-text>
+                    <n-space vertical size="small" style="margin-left: 12px">
+                      <n-text
+                        v-for="(value, key) in npmStatus.envVars"
+                        :key="key"
+                        depth="3"
+                        style="font-size: 12px"
+                      >
+                        • {{ key }}: <n-text code>{{ value }}</n-text>
+                      </n-text>
+                    </n-space>
+                    <n-text depth="3" style="font-size: 12px">
+                      环境变量会覆盖配置文件，建议在系统中删除这些环境变量后重启应用。
+                    </n-text>
+                  </template>
+                  <template v-if="npmStatus?.hasGlobalConfig">
+                    <n-text>检测到 global 级别的配置，建议清空后使用 user 配置。</n-text>
+                  </template>
+                  <n-button size="small" type="error" @click="clearAllGlobalConfig" style="margin-top: 8px">
+                    🧹 一键清空 Global 配置
+                  </n-button>
+                </n-space>
+              </n-alert>
+
               <n-form-item label="选择镜像源">
                 <n-select
                   v-model:value="configForm.selectedMirror"
@@ -637,6 +1000,41 @@ onUnmounted(() => {
                   type="text"
                   placeholder="或手动输入镜像源地址"
                 />
+              </n-form-item>
+
+              <!-- npm 专用：测速功能 -->
+              <n-form-item v-if="selectedTool === 'npm'" label="测试速度">
+                <n-space vertical style="width: 100%">
+                  <n-space>
+                    <n-button
+                      :loading="npmPingLoading"
+                      :disabled="!configForm.registry"
+                      @click="npmPingTest(configForm.registry)"
+                    >
+                      测试当前源
+                    </n-button>
+                    <n-button
+                      :loading="npmPingLoading"
+                      @click="npmPingTest()"
+                    >
+                      测试默认源
+                    </n-button>
+                  </n-space>
+                  
+                  <n-card v-if="npmPingResult" :bordered="false" size="small" style="background: #f5f5f5">
+                    <n-space align="center">
+                      <n-tag :type="npmPingResult.success ? 'success' : 'error'" size="small">
+                        {{ npmPingResult.success ? '✓ 连接成功' : '✗ 连接失败' }}
+                      </n-tag>
+                      <n-text v-if="npmPingResult.success" strong>
+                        响应时间：{{ npmPingResult.duration }}ms
+                      </n-text>
+                      <n-text v-else depth="3" style="font-size: 12px">
+                        {{ npmPingResult.message }}
+                      </n-text>
+                    </n-space>
+                  </n-card>
+                </n-space>
               </n-form-item>
             </n-form>
           </n-tab-pane>
@@ -680,14 +1078,91 @@ onUnmounted(() => {
                   placeholder="例如：C:\npm-cache"
                 />
               </n-form-item>
+
+              <!-- npm 专用：缓存信息 -->
+              <template v-if="selectedTool === 'npm'">
+                <n-divider style="margin: 12px 0" />
+                
+                <n-spin :show="npmCacheLoading">
+                  <n-space vertical style="width: 100%">
+                    <n-card v-if="npmCacheInfo" :bordered="false" size="small" style="background: #f5f5f5">
+                      <n-space vertical>
+                        <n-space align="center">
+                          <n-text strong>当前路径：</n-text>
+                          <n-text code>{{ npmCacheInfo.cachePath }}</n-text>
+                        </n-space>
+                        <n-space align="center">
+                          <n-text strong>占用空间：</n-text>
+                          <n-text type="info" strong style="font-size: 18px">
+                            {{ npmCacheInfo.sizeFormatted }}
+                          </n-text>
+                        </n-space>
+                      </n-space>
+                    </n-card>
+
+                    <!-- 配置状态提示 -->
+                    <n-alert 
+                      v-if="npmStatus && (Object.keys(npmStatus.envVars || {}).length > 0 || npmStatus.hasGlobalConfig)"
+                      type="info"
+                      title="📋 配置状态"
+                      style="margin-top: 12px"
+                    >
+                      <n-space vertical size="small">
+                        <template v-if="Object.keys(npmStatus.envVars || {}).length > 0">
+                          <n-text type="warning">⚠️ 检测到环境变量：</n-text>
+                          <n-ul style="font-size: 12px">
+                            <n-li v-for="(value, key) in npmStatus.envVars" :key="key">
+                              {{ key }} = {{ value }}
+                            </n-li>
+                          </n-ul>
+                        </template>
+                        <template v-if="npmStatus.hasGlobalConfig">
+                          <n-text type="warning">⚠️ 存在 global 级别配置</n-text>
+                        </template>
+                        <n-button 
+                          size="small" 
+                          type="error"
+                          @click="clearAllGlobalConfig"
+                          style="margin-top: 8px"
+                        >
+                          🧹 一键清空 Global 配置
+                        </n-button>
+                      </n-space>
+                    </n-alert>
+
+                    <n-space>
+                      <n-button
+                        type="warning"
+                        :loading="npmCacheLoading"
+                        @click="cleanNpmCache"
+                      >
+                        清理并校验缓存
+                      </n-button>
+                      <n-button
+                        :loading="npmCacheLoading"
+                        @click="loadNpmCacheInfo"
+                      >
+                        刷新信息
+                      </n-button>
+                    </n-space>
+
+                    <n-text depth="3" style="font-size: 12px">
+                      ⚠️ 清理缓存会执行 <n-text code>npm cache clean --force && npm cache verify</n-text>
+                    </n-text>
+                  </n-space>
+                </n-spin>
+              </template>
             </n-form>
           </n-tab-pane>
         </n-tabs>
-
+        </n-spin>
+        
         <template #footer>
           <n-space justify="end">
-            <n-button @click="showConfigModal = false">取消</n-button>
-            <n-button type="primary" @click="saveToolConfig">保存配置</n-button>
+            <n-button type="primary" @click="saveToolConfig" :loading="savingConfig" :disabled="savingConfig">
+              {{ savingConfig ? '保存中...' : '保存配置' }}
+            </n-button>
+            <n-button @click="showConfigModal = false" :disabled="savingConfig">关闭</n-button>
           </n-space>
         </template>
       </n-card>

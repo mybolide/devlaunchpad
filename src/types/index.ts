@@ -40,6 +40,7 @@ declare global {
         saveToolConfig: (config: any) => Promise<any>
         getToolConfig: (toolName: string) => Promise<any>
       }
+      invoke: (channel: string, ...args: any[]) => Promise<any>
       platform: string
       versions: NodeJS.ProcessVersions
     }
@@ -108,6 +109,7 @@ export interface ToolInfo {
   currentProxy?: string
   cacheDir?: string
   registryUrl?: string
+  mirrors?: Mirror[]
   error?: string
 }
 

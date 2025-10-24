@@ -19,14 +19,14 @@ const npmConfig: Tool = {
   category: 'package_manager',
   checkCmd: ['npm', '--version'],
   enableCmds: [
-    ['npm', 'config', 'set', 'proxy', '{proxy}', '--global'],
-    ['npm', 'config', 'set', 'https-proxy', '{proxy}', '--global']
+    ['npm', 'config', 'set', 'proxy', '{proxy}'],
+    ['npm', 'config', 'set', 'https-proxy', '{proxy}']
   ],
   disableCmds: [
-    ['npm', 'config', 'delete', 'proxy', '--global'],
-    ['npm', 'config', 'delete', 'https-proxy', '--global']
+    ['npm', 'config', 'delete', 'proxy'],
+    ['npm', 'config', 'delete', 'https-proxy']
   ],
-  getProxyCmd: ['npm', 'config', 'get', 'proxy', '--global'],
+  getProxyCmd: ['npm', 'config', 'get', 'proxy'],
   // 镜像源配置
   mirrors: [
     {
@@ -55,10 +55,10 @@ const npmConfig: Tool = {
       location: '美国'
     }
   ],
-  getRegistryCmd: ['npm', 'config', 'get', 'registry', '--global'],
-  setRegistryCmd: ['npm', 'config', 'set', 'registry', '{registry}', '--global'],
-  getCacheDirCmd: ['npm', 'config', 'get', 'cache', '--global'],
-  setCacheDirCmd: ['npm', 'config', 'set', 'cache', '{cacheDir}', '--global'],
+  getRegistryCmd: ['npm', 'config', 'get', 'registry'],
+  setRegistryCmd: ['npm', 'config', 'set', 'registry', '{registry}'],
+  getCacheDirCmd: ['npm', 'config', 'get', 'cache'],
+  setCacheDirCmd: ['npm', 'config', 'set', 'cache', '{cacheDir}'],
   description: 'Node.js 包管理器'
 }
 

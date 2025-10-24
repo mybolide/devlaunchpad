@@ -135,6 +135,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   proxy: proxyAPI,
   db: dbAPI,
   platform: process.platform, // 操作系统类型
-  versions: process.versions // 版本信息
+  versions: process.versions, // 版本信息
+  
+  // 通用 IPC 调用方法（用于动态调用任意 IPC）
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args)
 })
 

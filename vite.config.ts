@@ -9,6 +9,20 @@ import { copyFileSync, mkdirSync } from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 复制 preload.js 的辅助函数
+function copyPreloadFile() {
+  try {
+    mkdirSync(path.join(__dirname, 'dist-electron'), { recursive: true })
+    copyFileSync(
+      path.join(__dirname, 'electron/preload.js'),
+      path.join(__dirname, 'dist-electron/preload.js')
+    )
+    console.log('[Vite] ✓ preload.js copied to dist-electron')
+  } catch (error) {
+    console.error('[Vite] ✗ Failed to copy preload.js:', error)
+  }
+}
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -24,21 +38,24 @@ export default defineConfig({
           }
         },
         onstart() {
-          // 每次启动前复制 preload.js
-          try {
-            mkdirSync(path.join(__dirname, 'dist-electron'), { recursive: true })
-            copyFileSync(
-              path.join(__dirname, 'electron/preload.js'),
-              path.join(__dirname, 'dist-electron/preload.js')
-            )
-            console.log('[Vite] preload.js copied to dist-electron')
-          } catch (error) {
-            console.error('[Vite] Failed to copy preload.js:', error)
-          }
+          // 开发模式：每次启动前复制 preload.js
+          copyPreloadFile()
         }
       }
     ]),
-    renderer()
+    renderer(),
+    // 确保 build 时也复制 preload.js
+    {
+      name: 'copy-preload',
+      buildEnd() {
+        // 在 Electron 主进程编译完成后复制
+        copyPreloadFile()
+      },
+      closeBundle() {
+        // 在整个 bundle 关闭时也复制一次（以防万一）
+        copyPreloadFile()
+      }
+    }
   ],
   resolve: {
     alias: {

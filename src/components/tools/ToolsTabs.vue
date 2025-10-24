@@ -49,15 +49,15 @@
           </div>
         </template>
 
-        <slot :category="category" />
+        <slot v-if="currentTab === category.name" :category="category" />
       </n-tab-pane>
     </n-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useMessage } from 'naive-ui'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { NTabs, NTabPane, NButton, useMessage } from 'naive-ui'
 
 const message = useMessage()
 
@@ -75,7 +75,10 @@ const emit = defineEmits<{
 
 // 状态
 const showScrollArrows = ref(false)
-const currentTab = ref(props.modelValue)
+const currentTab = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
+})
 let draggedCategoryIndex = -1
 
 // 检测是否需要滚动箭头
@@ -93,7 +96,6 @@ function checkScrollable() {
 // Tab 切换
 function handleTabChange(tabName: string) {
   currentTab.value = tabName
-  emit('update:modelValue', tabName)
   emit('tabChange', tabName)
 }
 

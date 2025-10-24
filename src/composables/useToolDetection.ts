@@ -9,35 +9,56 @@ export function useToolDetection() {
   const loadingCategory = ref<string>('')
   const loadedCategories = ref<Set<string>>(new Set())
   
+  // 工具默认分类映射
+  const toolCategoryMap: Record<string, string> = {
+    npm: 'frontend',
+    yarn: 'frontend',
+    pnpm: 'frontend',
+    bun: 'frontend',
+    git: 'devops',
+    curl: 'backend',
+    wget: 'backend'
+  }
+  
   // 加载指定分类的工具
   async function loadCategoryTools(categoryName: string) {
-    if (!window.electronAPI || loadedCategories.value.has(categoryName)) {
+    if (!window.electronAPI) return
+    
+    // 如果已经加载过，跳过
+    if (loadedCategories.value.has(categoryName)) {
       return
     }
     
     try {
       loadingCategory.value = categoryName
       
-      // 获取该分类下的工具
-      const categoryTools = tools.value.filter(t => t.category === categoryName)
+      // 获取该分类下的工具名称
+      const categoryToolNames = Object.entries(toolCategoryMap)
+        .filter(([_, cat]) => cat === categoryName)
+        .map(([name, _]) => name)
       
-      // 并发检测所有工具
-      await Promise.all(
-        categoryTools.map(async (tool) => {
-          try {
-            const info = await window.electronAPI.tool.detect(tool.name)
-            const index = tools.value.findIndex(t => t.name === tool.name)
-            if (index !== -1) {
-              tools.value[index] = { ...tools.value[index], ...info }
-            }
-          } catch (error) {
-            console.error(`检测工具 ${tool.name} 失败:`, error)
-          }
-        })
-      )
+      if (categoryToolNames.length === 0) {
+        loadedCategories.value.add(categoryName)
+        return
+      }
+      
+      // 获取这些工具的详细信息
+      const toolInfos = await window.electronAPI.tool.getToolsInfo(categoryToolNames)
+      
+      // 合并到总列表
+      toolInfos.forEach((toolInfo: ToolInfo) => {
+        const index = tools.value.findIndex((t) => t.name === toolInfo.name)
+        if (index >= 0) {
+          tools.value[index] = toolInfo
+        } else {
+          tools.value.push(toolInfo)
+        }
+      })
       
       // 标记该分类已加载
       loadedCategories.value.add(categoryName)
+    } catch (error) {
+      console.error(`加载 ${categoryName} 分类失败:`, error)
     } finally {
       loadingCategory.value = ''
     }
@@ -48,13 +69,15 @@ export function useToolDetection() {
     if (!window.electronAPI) return
     
     try {
-      const info = await window.electronAPI.tool.detect(toolName)
-      const index = tools.value.findIndex(t => t.name === toolName)
-      if (index !== -1) {
-        tools.value[index] = { ...tools.value[index], ...info }
+      const updatedInfo = await window.electronAPI.tool.getToolInfo(toolName)
+      if (updatedInfo) {
+        const index = tools.value.findIndex((t) => t.name === toolName)
+        if (index !== -1) {
+          tools.value[index] = updatedInfo
+        }
       }
     } catch (error) {
-      console.error(`刷新工具 ${toolName} 信息失败:`, error)
+      console.error('刷新工具信息失败:', error)
     }
   }
   
@@ -63,7 +86,8 @@ export function useToolDetection() {
     loadingCategory,
     loadedCategories,
     loadCategoryTools,
-    refreshToolInfo
+    refreshToolInfo,
+    toolCategoryMap
   }
 }
 

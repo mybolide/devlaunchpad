@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
-import { NTabs, NTabPane, NDataTable, NSpin, NButton, NTag, useMessage, useDialog } from 'naive-ui'
-import type { DataTableColumns } from 'naive-ui'
+import { ref, computed, onMounted } from 'vue'
+import { NSpin, NTabs, NTabPane, useMessage, useDialog } from 'naive-ui'
 import type { ToolInfo } from '../types'
 
 // 导入 composables
 import { useNpmConfig } from '../composables/useNpmConfig'
 import { useYarnConfig } from '../composables/useYarnConfig'
+import { useToolDetection } from '../composables/useToolDetection'
 
 // 导入组件
+import ToolsTable from '../components/tools/ToolsTable.vue'
 import NpmConfigModal from '../components/tools/npm/NpmConfigModal.vue'
 import YarnConfigModal from '../components/tools/yarn/YarnConfigModal.vue'
 import PnpmConfigModal from '../components/tools/PnpmConfigModal.vue'
@@ -38,188 +39,23 @@ const {
   cleanYarnCache
 } = useYarnConfig()
 
+const {
+  tools,
+  loadingCategory,
+  loadedCategories,
+  loadCategoryTools,
+  refreshToolInfo,
+  toolCategoryMap
+} = useToolDetection()
+
 // ============================================
 // 基础状态
 // ============================================
-const tools = ref<ToolInfo[]>([])
 const categories = ref<any[]>([])
 const currentTab = ref('frontend')
-const loadingCategory = ref<string>('')
-const loadedCategories = ref<Set<string>>(new Set())
 const showConfigModal = ref(false)
 const selectedTool = ref<string>('')
 const availableMirrors = ref<any[]>([])
-
-// 工具默认分类映射
-const toolCategoryMap: Record<string, string> = {
-  npm: 'frontend',
-  yarn: 'frontend',
-  pnpm: 'frontend',
-  bun: 'frontend',
-  git: 'devops',
-  curl: 'backend',
-  wget: 'backend'
-}
-
-// ============================================
-// 工具表格列定义
-// ============================================
-// 提取版本号
-function extractVersion(versionString: string): string {
-  if (!versionString) return '-'
-  const match = versionString.match(/v?(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)/)
-  if (match && match[1]) {
-    return match[1]
-  }
-  return versionString.substring(0, 20)
-}
-
-// 截断文本
-function truncateText(text: string, maxLength: number = 30): string {
-  if (!text || text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
-}
-
-const columns: DataTableColumns<ToolInfo> = [
-  {
-    title: '工具',
-    key: 'displayName',
-    minWidth: 100,
-    ellipsis: {
-      tooltip: true
-    },
-    render: (row) => h('span', { style: { fontWeight: '500' } }, row.displayName)
-  },
-  {
-    title: '版本',
-    key: 'version',
-    minWidth: 120,
-    ellipsis: {
-      tooltip: true
-    },
-    render: (row) => {
-      if (row.status !== 'installed' || !row.version) {
-        return h('span', { style: { color: '#999' } }, '-')
-      }
-      const version = extractVersion(row.version)
-      const fullVersion = row.version || ''
-      return h('span', { 
-        style: { 
-          fontFamily: 'monospace', 
-          fontSize: '12px',
-          cursor: 'help'
-        },
-        title: fullVersion !== version ? fullVersion : undefined
-      }, version)
-    }
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 100,
-    render: (row) => {
-      if (row.status === 'installed') {
-        return h(NTag, { type: 'success', size: 'small', round: true }, { default: () => '✓ 已安装' })
-      }
-      return h(NTag, { type: 'error', size: 'small', round: true }, { default: () => '✗ 未安装' })
-    }
-  },
-  {
-    title: '当前配置',
-    key: 'config',
-    minWidth: 300,
-    render: (row) => {
-      if (row.status !== 'installed') {
-        return h('span', { style: { color: '#999' } }, '-')
-      }
-      
-      const configs = []
-      
-      // 显示镜像源
-      if (row.registryUrl) {
-        configs.push(h('div', { 
-          style: { fontSize: '12px', marginBottom: '4px' },
-          title: row.registryUrl
-        }, [
-          h('span', { style: { color: '#666', marginRight: '4px' } }, '镜像:'),
-          h('code', { 
-            style: { 
-              color: '#2563eb', 
-              background: '#f0f4ff',
-              padding: '2px 4px',
-              borderRadius: '3px',
-              fontSize: '11px',
-              cursor: 'help'
-            }
-          }, truncateText(row.registryUrl || '', 50))
-        ]))
-      }
-      
-      // 显示代理
-      if (row.proxyEnabled && row.currentProxy) {
-        configs.push(h('div', { 
-          style: { fontSize: '12px', marginBottom: '4px' },
-          title: row.currentProxy
-        }, [
-          h('span', { style: { color: '#666', marginRight: '4px' } }, '代理:'),
-          h('code', { 
-            style: { 
-              color: '#16a34a', 
-              background: '#f0fdf4',
-              padding: '2px 4px',
-              borderRadius: '3px',
-              fontSize: '11px',
-              cursor: 'help'
-            }
-          }, truncateText(row.currentProxy, 40))
-        ]))
-      }
-      
-      // 显示缓存目录
-      if (row.cacheDir) {
-        configs.push(h('div', { 
-          style: { fontSize: '12px' },
-          title: row.cacheDir
-        }, [
-          h('span', { style: { color: '#666', marginRight: '4px' } }, '缓存:'),
-          h('code', { 
-            style: { 
-              color: '#666',
-              background: '#f5f5f5',
-              padding: '2px 4px',
-              borderRadius: '3px',
-              fontSize: '11px',
-              cursor: 'help'
-            }
-          }, truncateText(row.cacheDir, 40))
-        ]))
-      }
-      
-      if (configs.length === 0) {
-        return h('span', { style: { color: '#999', fontSize: '12px' } }, '未配置')
-      }
-      
-      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } }, configs)
-    }
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 120,
-    align: 'center' as const,
-    render: (row) => {
-      if (row.status !== 'installed') {
-        return h('span', { style: { color: '#999' } }, '-')
-      }
-      
-      return h(NButton, {
-        size: 'small',
-        secondary: true,
-        onClick: () => openToolConfig(row.name)
-      }, { default: () => '配置' })
-    }
-  }
-]
 
 // ============================================
 // 计算属性
@@ -249,9 +85,6 @@ const currentCategoryTools = computed(() => {
   return toolsByUserCategory.value[currentTab.value] || []
 })
 
-// ============================================
-// 方法
-// ============================================
 // 获取全局代理 URL
 function getGlobalProxyUrl() {
   const saved = localStorage.getItem('globalProxy')
@@ -268,7 +101,9 @@ function getGlobalProxyUrl() {
   return ''
 }
 
-// 初始化分类
+// ============================================
+// 初始化
+// ============================================
 async function initCategories() {
   if (!window.electronAPI) return
   
@@ -286,75 +121,15 @@ async function initCategories() {
   }
 }
 
-// 加载指定分类的工具
-async function loadCategoryTools(categoryName: string) {
-  if (!window.electronAPI) return
-  
-  // 如果已经加载过，跳过
-  if (loadedCategories.value.has(categoryName)) {
-    return
-  }
-  
-  try {
-    loadingCategory.value = categoryName
-    
-    // 获取该分类下的工具名称
-    const categoryToolNames = Object.entries(toolCategoryMap)
-      .filter(([_, cat]) => cat === categoryName)
-      .map(([name, _]) => name)
-    
-    if (categoryToolNames.length === 0) {
-      loadedCategories.value.add(categoryName)
-      return
-    }
-    
-    // 获取这些工具的详细信息
-    const toolInfos = await window.electronAPI.tool.getToolsInfo(categoryToolNames)
-    
-    // 合并到总列表
-    toolInfos.forEach((toolInfo: ToolInfo) => {
-      const index = tools.value.findIndex((t) => t.name === toolInfo.name)
-      if (index >= 0) {
-        tools.value[index] = toolInfo
-      } else {
-        tools.value.push(toolInfo)
-      }
-    })
-    
-    // 标记该分类已加载
-    loadedCategories.value.add(categoryName)
-  } catch (error) {
-    console.error(`加载 ${categoryName} 分类失败:`, error)
-    message.error(`加载工具失败: ${error}`)
-  } finally {
-    loadingCategory.value = ''
-  }
-}
-
 // Tab 切换处理
 async function handleTabChange(tabName: string) {
   currentTab.value = tabName
   await loadCategoryTools(tabName)
 }
 
-// 刷新单个工具信息
-async function refreshToolInfo(toolName: string) {
-  if (!window.electronAPI) return
-  
-  try {
-    const updatedInfo = await window.electronAPI.tool.getToolInfo(toolName)
-    if (updatedInfo) {
-      const index = tools.value.findIndex((t) => t.name === toolName)
-      if (index !== -1) {
-        tools.value[index] = updatedInfo
-      }
-    }
-  } catch (error) {
-    console.error('刷新工具信息失败:', error)
-  }
-}
-
-// 打开工具配置
+// ============================================
+// 配置管理
+// ============================================
 async function openToolConfig(toolName: string) {
   if (!window.electronAPI) return
   
@@ -511,6 +286,7 @@ async function handlePnpmSave(data: any) {
       custom_proxy: tab === 'proxy' ? form.customProxy : undefined
     })
     
+    // pnpm 使用命令行设置
     if (tab === 'registry' && form.registry) {
       const result = await window.electronAPI.invoke('command:execute', `pnpm config set registry "${form.registry}"`)
       if (result.success) {
@@ -519,6 +295,7 @@ async function handlePnpmSave(data: any) {
         message.error(`镜像源设置失败: ${result.message}`)
       }
     } else if (tab === 'proxy') {
+      // TODO: 实现 pnpm 代理设置
       message.info('pnpm 代理设置功能开发中')
     } else if (tab === 'cache' && form.cacheDir) {
       const result = await window.electronAPI.invoke('command:execute', `pnpm config set cache-dir "${form.cacheDir}"`)
@@ -549,9 +326,7 @@ function handleClearGlobalConfig() {
   })
 }
 
-// ============================================
-// 生命周期
-// ============================================
+// 初始化
 onMounted(() => {
   initCategories()
 })
@@ -565,7 +340,7 @@ onMounted(() => {
       <p class="subtitle">管理开发工具的代理和配置</p>
     </div>
 
-    <!-- 分类 Tabs -->
+    <!-- 分类 Tabs - 直接使用 NTabs 不包装 -->
     <div v-if="categories.length > 0" class="tools-container">
       <n-tabs 
         v-model:value="currentTab" 
@@ -584,15 +359,14 @@ onMounted(() => {
           <n-spin 
             :show="loadingCategory === category.name" 
             description="检测工具状态中..."
-            style="min-height: 200px; padding: 20px 0"
+            style="min-height: 200px"
           >
-            <!-- 工具表格 - 直接使用 NDataTable -->
-            <n-data-table
-              v-if="currentTab === category.name"
-              :columns="columns"
-              :data="currentCategoryTools"
-              :bordered="false"
-              :single-line="false"
+            <!-- 工具表格 -->
+            <ToolsTable
+              v-if="loadedCategories.has(category.name) && currentTab === category.name"
+              :tools="currentCategoryTools"
+              @configure="openToolConfig"
+              @refresh="refreshToolInfo"
               style="margin-top: 16px"
             />
           </n-spin>

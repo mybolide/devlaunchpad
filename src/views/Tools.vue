@@ -621,6 +621,127 @@ async function clearAllGlobalConfig() {
 }
 
 // ============================================
+// npm 组件专用处理函数
+// ============================================
+const npmModalRef = ref()
+const yarnModalRef = ref()
+
+async function handleNpmSave(data: any) {
+  const { tab, form } = data
+  
+  if (npmModalRef.value) npmModalRef.value.setSaving(true)
+  
+  try {
+    // 保存到配置文件
+    await window.electronAPI.db.saveToolConfig({
+      tool_name: 'npm',
+      registry_url: tab === 'registry' ? form.registry : undefined,
+      cache_dir: tab === 'cache' ? form.cacheDir : undefined,
+      proxy_type: tab === 'proxy' ? form.proxyType : undefined,
+      custom_proxy: tab === 'proxy' ? form.customProxy : undefined
+    })
+    
+    // 根据 tab 执行对应操作
+    if (tab === 'registry' && form.registry) {
+      const result = await window.electronAPI.invoke('npm:setRegistry', form.registry)
+      if (result.success) {
+        message.success(`✓ 镜像源设置成功`)
+        if (npmModalRef.value) npmModalRef.value.updateForm({ registry: result.value })
+      } else {
+        message.error(`镜像源设置失败: ${result.message}`)
+      }
+    } else if (tab === 'proxy') {
+      let proxyUrl = null
+      if (form.proxyType === 'global') {
+        proxyUrl = getGlobalProxyUrl()
+      } else if (form.proxyType === 'custom') {
+        proxyUrl = form.customProxy
+      }
+      
+      const result = await window.electronAPI.invoke('npm:setProxy', proxyUrl)
+      if (result.success) {
+        message.success(proxyUrl ? '✓ 代理已设置' : '✓ 代理已清除')
+      } else {
+        message.error(`代理设置失败: ${result.message}`)
+      }
+    } else if (tab === 'cache' && form.cacheDir) {
+      const result = await window.electronAPI.invoke('npm:setCacheDir', form.cacheDir)
+      if (result.success) {
+        message.success(`✓ 缓存目录设置成功`)
+        if (npmModalRef.value) npmModalRef.value.updateForm({ cacheDir: result.value })
+        loadNpmCacheInfo()
+      } else {
+        message.error(`缓存目录设置失败: ${result.message}`)
+      }
+    }
+  } catch (error) {
+    message.error('保存配置失败: ' + error)
+  } finally {
+    if (npmModalRef.value) npmModalRef.value.setSaving(false)
+    refreshToolInfo('npm')
+  }
+}
+
+// ============================================
+// yarn 组件专用处理函数
+// ============================================
+async function handleYarnSave(data: any) {
+  const { tab, form } = data
+  
+  if (yarnModalRef.value) yarnModalRef.value.setSaving(true)
+  
+  try {
+    // 保存到配置文件
+    await window.electronAPI.db.saveToolConfig({
+      tool_name: 'yarn',
+      registry_url: tab === 'registry' ? form.registry : undefined,
+      cache_dir: tab === 'cache' ? form.cacheDir : undefined,
+      proxy_type: tab === 'proxy' ? form.proxyType : undefined,
+      custom_proxy: tab === 'proxy' ? form.customProxy : undefined
+    })
+    
+    // 根据 tab 执行对应操作
+    if (tab === 'registry' && form.registry) {
+      const result = await window.electronAPI.invoke('yarn:setRegistry', form.registry)
+      if (result.success) {
+        message.success(`✓ 镜像源设置成功`)
+        if (yarnModalRef.value) yarnModalRef.value.updateForm({ registry: result.value })
+      } else {
+        message.error(`镜像源设置失败: ${result.message}`)
+      }
+    } else if (tab === 'proxy') {
+      let proxyUrl = null
+      if (form.proxyType === 'global') {
+        proxyUrl = getGlobalProxyUrl()
+      } else if (form.proxyType === 'custom') {
+        proxyUrl = form.customProxy
+      }
+      
+      const result = await window.electronAPI.invoke('yarn:setProxy', proxyUrl)
+      if (result.success) {
+        message.success(proxyUrl ? '✓ 代理已设置' : '✓ 代理已清除')
+      } else {
+        message.error(`代理设置失败: ${result.message}`)
+      }
+    } else if (tab === 'cache' && form.cacheDir) {
+      const result = await window.electronAPI.invoke('yarn:setCacheFolder', form.cacheDir)
+      if (result.success) {
+        message.success(`✓ 缓存目录设置成功`)
+        if (yarnModalRef.value) yarnModalRef.value.updateForm({ cacheDir: result.value })
+        loadYarnCacheInfo()
+      } else {
+        message.error(`缓存目录设置失败: ${result.message}`)
+      }
+    }
+  } catch (error) {
+    message.error('保存配置失败: ' + error)
+  } finally {
+    if (yarnModalRef.value) yarnModalRef.value.setSaving(false)
+    refreshToolInfo('yarn')
+  }
+}
+
+// ============================================
 // yarn 专用功能
 // ============================================
 
@@ -753,8 +874,27 @@ async function saveToolConfig() {
               return
             }
           } 
-          // yarn 和 pnpm 使用命令行
-          else if (selectedTool.value === 'yarn' || selectedTool.value === 'pnpm') {
+          // yarn 使用新的 setRegistry API
+          else if (selectedTool.value === 'yarn') {
+            console.log('[saveToolConfig] 调用 yarn:setRegistry，设置 registry =', registryUrl)
+            result = await window.electronAPI.invoke('yarn:setRegistry', registryUrl)
+            console.log('[saveToolConfig] yarn:setRegistry 结果:', result)
+            
+            if (result && result.success) {
+              message.success(`✓ 镜像源设置成功: ${truncateText(result.value || registryUrl, 40)}`)
+              // 更新表单显示的值
+              configForm.value.registry = result.value || registryUrl
+              // 后台异步刷新状态（不阻塞）
+              getYarnStatus()
+            } else {
+              console.error('[saveToolConfig] yarn:setRegistry 失败:', result)
+              message.error(`镜像源设置失败: ${result?.message || '未知错误'}`)
+              savingConfig.value = false
+              return
+            }
+          }
+          // pnpm 使用命令行
+          else if (selectedTool.value === 'pnpm') {
             const cmd = `${selectedTool.value} config set registry "${registryUrl}"`
             result = await window.electronAPI.invoke('command:execute', cmd)
             
@@ -807,27 +947,48 @@ async function saveToolConfig() {
     } else if (activeConfigTab.value === 'proxy') {
       // 2. 设置代理
       if (selectedTool.value === 'npm') {
-      // npm 使用新的 setProxy API
-      let proxyUrl = null
-      if (configForm.value.proxyType === 'global') {
-        proxyUrl = getGlobalProxyUrl()
-      } else if (configForm.value.proxyType === 'custom') {
-        proxyUrl = configForm.value.customProxy
-      }
-      
-      const result = await window.electronAPI.invoke('npm:setProxy', proxyUrl)
-      if (result.success) {
-        message.success(proxyUrl ? '代理已设置' : '代理已清除')
-        // 更新表单显示的值
-        if (proxyUrl) {
-          configForm.value.customProxy = proxyUrl
+        // npm 使用新的 setProxy API
+        let proxyUrl = null
+        if (configForm.value.proxyType === 'global') {
+          proxyUrl = getGlobalProxyUrl()
+        } else if (configForm.value.proxyType === 'custom') {
+          proxyUrl = configForm.value.customProxy
         }
-        // 后台异步刷新状态（不阻塞）
-        getNpmStatus()
+        
+        const result = await window.electronAPI.invoke('npm:setProxy', proxyUrl)
+        if (result.success) {
+          message.success(proxyUrl ? '✓ 代理已设置' : '✓ 代理已清除')
+          // 更新表单显示的值
+          if (proxyUrl) {
+            configForm.value.customProxy = proxyUrl
+          }
+          // 后台异步刷新状态（不阻塞）
+          getNpmStatus()
+        } else {
+          message.error('代理设置失败: ' + result.message)
+        }
+      } else if (selectedTool.value === 'yarn') {
+        // yarn 使用新的 setProxy API
+        let proxyUrl = null
+        if (configForm.value.proxyType === 'global') {
+          proxyUrl = getGlobalProxyUrl()
+        } else if (configForm.value.proxyType === 'custom') {
+          proxyUrl = configForm.value.customProxy
+        }
+        
+        const result = await window.electronAPI.invoke('yarn:setProxy', proxyUrl)
+        if (result.success) {
+          message.success(proxyUrl ? '✓ 代理已设置' : '✓ 代理已清除')
+          // 更新表单显示的值
+          if (proxyUrl) {
+            configForm.value.customProxy = proxyUrl
+          }
+          // 后台异步刷新状态（不阻塞）
+          getYarnStatus()
+        } else {
+          message.error('代理设置失败: ' + result.message)
+        }
       } else {
-        message.error('代理设置失败: ' + result.message)
-      }
-    } else {
       // 其他工具使用原有逻辑
       if (configForm.value.proxyType === 'global') {
         const globalProxy = getGlobalProxyUrl()
@@ -1010,8 +1171,43 @@ onUnmounted(() => {
       </n-tabs>
     </div>
 
-    <!-- 工具配置对话框 -->
+    <!-- npm 配置弹窗 -->
+    <NpmConfigModal
+      v-if="selectedTool === 'npm'"
+      ref="npmModalRef"
+      v-model:show="showConfigModal"
+      :tool-info="tools.find(t => t.name === selectedTool)"
+      :mirrors="availableMirrors"
+      :global-proxy-url="getGlobalProxyUrl()"
+      :npm-status="npmStatus"
+      :cache-info="npmCacheInfo"
+      :cache-loading="npmCacheLoading"
+      @save="handleNpmSave"
+      @clear-global-config="clearAllGlobalConfig"
+      @clean-cache="cleanNpmCache"
+      @load-cache-info="loadNpmCacheInfo"
+      @load-status="getNpmStatus"
+    />
+
+    <!-- yarn 配置弹窗 -->
+    <YarnConfigModal
+      v-if="selectedTool === 'yarn'"
+      ref="yarnModalRef"
+      v-model:show="showConfigModal"
+      :tool-info="tools.find(t => t.name === selectedTool)"
+      :mirrors="availableMirrors"
+      :global-proxy-url="getGlobalProxyUrl()"
+      :cache-info="yarnCacheInfo"
+      :cache-loading="yarnCacheLoading"
+      @save="handleYarnSave"
+      @clean-cache="cleanYarnCache"
+      @load-cache-info="loadYarnCacheInfo"
+      @load-status="getYarnStatus"
+    />
+
+    <!-- 其他工具的配置弹窗 (pnpm 等) -->
     <n-modal
+      v-if="selectedTool !== 'npm' && selectedTool !== 'yarn'"
       v-model:show="showConfigModal"
       :title="`${selectedTool} 配置`"
       style="width: 700px"

@@ -234,28 +234,86 @@ const form = ref({
 
 // 监听弹窗打开，加载配置
 watch(() => props.show, async (newVal) => {
-  if (newVal && props.toolInfo) {
+  if (newVal) {
+    console.log('[YarnConfigModal] 弹窗打开')
+    console.log('[YarnConfigModal] toolInfo:', props.toolInfo)
+    console.log('[YarnConfigModal] 缓存信息:', props.cacheInfo)
+    
     loading.value = true
     
-    // 加载表单数据
-    form.value.registry = props.toolInfo.registry || ''
-    form.value.cacheDir = props.toolInfo.cacheDir || ''
-    form.value.proxyType = props.toolInfo.proxyType || 'none'
-    form.value.customProxy = props.toolInfo.customProxy || ''
+    // 初始化表单数据
+    initializeForm()
     
     loading.value = false
-    
-    // 异步加载额外信息
-    emit('loadCacheInfo')
-    emit('loadStatus')
   }
 })
 
+// 初始化表单数据的函数
+function initializeForm() {
+  if (!props.toolInfo) {
+    console.warn('[YarnConfigModal] toolInfo 为空，跳过初始化')
+    return
+  }
+  
+  // 1. 初始化镜像源 URL
+  form.value.registry = props.toolInfo.registryUrl || props.toolInfo.registry || ''
+  console.log('[YarnConfigModal] 初始化 registry:', form.value.registry)
+  
+  // 2. 初始化缓存目录（优先使用 cacheInfo 中的实际路径）
+  form.value.cacheDir = props.cacheInfo?.cachePath || props.toolInfo.cacheDir || ''
+  console.log('[YarnConfigModal] 初始化 cacheDir:', form.value.cacheDir)
+  
+  // 3. 初始化代理配置
+  if (props.toolInfo.currentProxy) {
+    form.value.proxyType = 'custom'
+    form.value.customProxy = props.toolInfo.currentProxy
+  } else {
+    form.value.proxyType = 'none'
+    form.value.customProxy = ''
+  }
+  console.log('[YarnConfigModal] 初始化代理:', form.value.proxyType, form.value.customProxy)
+  
+  // 4. 根据当前 registry URL 匹配镜像源名称
+  if (form.value.registry && props.mirrors.length > 0) {
+    const currentMirror = props.mirrors.find(m => m.url === form.value.registry)
+    if (currentMirror) {
+      form.value.selectedMirror = currentMirror.name
+      console.log('[YarnConfigModal] ✓ 匹配到镜像源:', currentMirror.name)
+    } else {
+      form.value.selectedMirror = ''
+      console.log('[YarnConfigModal] 使用自定义镜像源地址:', form.value.registry)
+    }
+  } else {
+    form.value.selectedMirror = ''
+  }
+  
+  console.log('[YarnConfigModal] ✓ 表单初始化完成:', JSON.stringify(form.value, null, 2))
+}
+
+// 监听 toolInfo 变化，重新初始化表单
+watch(() => props.toolInfo, (newToolInfo) => {
+  if (newToolInfo && props.show) {
+    console.log('[YarnConfigModal] toolInfo 更新，重新初始化表单')
+    initializeForm()
+  }
+}, { deep: true })
+
+// 监听缓存信息变化，更新表单中的缓存目录
+watch(() => props.cacheInfo, (newCacheInfo) => {
+  if (newCacheInfo && newCacheInfo.cachePath && props.show) {
+    form.value.cacheDir = newCacheInfo.cachePath
+    console.log('[YarnConfigModal] 缓存信息更新，更新表单:', newCacheInfo.cachePath)
+  }
+}, { deep: true })
+
 // 镜像源选择
 function handleMirrorChange(mirrorName: string) {
+  console.log('[handleMirrorChange] 选择镜像源:', mirrorName)
   const mirror = props.mirrors.find(m => m.name === mirrorName)
+  console.log('[handleMirrorChange] 找到镜像源:', mirror)
   if (mirror) {
-    form.value.registry = mirror.registryUrl
+    form.value.registry = mirror.url || mirror.registryUrl
+    console.log('[handleMirrorChange] 设置 registry:', form.value.registry)
   }
 }
 

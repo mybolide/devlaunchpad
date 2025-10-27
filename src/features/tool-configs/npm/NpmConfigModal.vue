@@ -270,49 +270,89 @@ const form = ref({
 
 // 监听弹窗打开，加载配置
 watch(() => props.show, async (newVal) => {
-  if (newVal && props.toolInfo) {
-    console.log('[NpmConfigModal] 弹窗打开，toolInfo:', props.toolInfo)
+  if (newVal) {
+    console.log('[NpmConfigModal] 弹窗打开')
+    console.log('[NpmConfigModal] toolInfo:', props.toolInfo)
     console.log('[NpmConfigModal] 可用镜像源:', props.mirrors)
     console.log('[NpmConfigModal] 缓存信息:', props.cacheInfo)
+    console.log('[NpmConfigModal] npm状态:', props.npmStatus)
     
     loading.value = true
     
-    // 加载表单数据
-    form.value.registry = props.toolInfo.registryUrl || ''
-    form.value.cacheDir = props.cacheInfo?.cachePath || props.toolInfo.cacheDir || ''
-    form.value.proxyType = props.toolInfo.proxyEnabled ? 'custom' : 'none'
-    form.value.customProxy = props.toolInfo.currentProxy || ''
-    
-    // 根据当前 registry 找到对应的镜像源
-    if (form.value.registry && props.mirrors.length > 0) {
-      const currentMirror = props.mirrors.find(m => m.url === form.value.registry)
-      if (currentMirror) {
-        form.value.selectedMirror = currentMirror.name
-        console.log('[NpmConfigModal] 找到匹配的镜像源:', currentMirror.name)
-      } else {
-        form.value.selectedMirror = ''
-        console.log('[NpmConfigModal] 未找到匹配的镜像源，使用自定义地址')
-      }
-    } else {
-      form.value.selectedMirror = ''
-    }
-    
-    console.log('[NpmConfigModal] 初始化表单数据:', form.value)
+    // 初始化表单数据
+    initializeForm()
     
     loading.value = false
-    
-    // 异步加载额外信息
-    emit('loadCacheInfo')
-    emit('loadStatus')
   }
 })
+
+// 初始化表单数据的函数
+function initializeForm() {
+  if (!props.toolInfo) {
+    console.warn('[NpmConfigModal] toolInfo 为空，跳过初始化')
+    return
+  }
+  
+  // 1. 初始化镜像源 URL（优先使用 registryUrl）
+  form.value.registry = props.toolInfo.registryUrl || props.toolInfo.registry || ''
+  console.log('[NpmConfigModal] 初始化 registry:', form.value.registry)
+  
+  // 2. 初始化缓存目录（优先使用 cacheInfo 中的实际路径）
+  form.value.cacheDir = props.cacheInfo?.cachePath || props.toolInfo.cacheDir || ''
+  console.log('[NpmConfigModal] 初始化 cacheDir:', form.value.cacheDir)
+  
+  // 3. 初始化代理配置
+  if (props.toolInfo.currentProxy) {
+    form.value.proxyType = 'custom'
+    form.value.customProxy = props.toolInfo.currentProxy
+  } else {
+    form.value.proxyType = 'none'
+    form.value.customProxy = ''
+  }
+  console.log('[NpmConfigModal] 初始化代理:', form.value.proxyType, form.value.customProxy)
+  
+  // 4. 根据当前 registry URL 匹配镜像源名称
+  if (form.value.registry && props.mirrors.length > 0) {
+    const currentMirror = props.mirrors.find(m => m.url === form.value.registry)
+    if (currentMirror) {
+      form.value.selectedMirror = currentMirror.name
+      console.log('[NpmConfigModal] ✓ 匹配到镜像源:', currentMirror.name, '(', currentMirror.displayName, ')')
+    } else {
+      form.value.selectedMirror = ''
+      console.log('[NpmConfigModal] 使用自定义镜像源地址:', form.value.registry)
+    }
+  } else {
+    form.value.selectedMirror = ''
+  }
+  
+  console.log('[NpmConfigModal] ✓ 表单初始化完成:', JSON.stringify(form.value, null, 2))
+}
+
+// 监听 toolInfo 变化，重新初始化表单
+watch(() => props.toolInfo, (newToolInfo) => {
+  if (newToolInfo && props.show) {
+    console.log('[NpmConfigModal] toolInfo 更新，重新初始化表单')
+    initializeForm()
+  }
+}, { deep: true })
 
 // 监听缓存信息变化，更新表单中的缓存目录
 watch(() => props.cacheInfo, (newCacheInfo) => {
   if (newCacheInfo && newCacheInfo.cachePath && props.show) {
     // 当缓存信息加载完成后，总是更新到表单中（显示当前实际的缓存路径）
     form.value.cacheDir = newCacheInfo.cachePath
-    console.log('[NpmConfigModal] 缓存信息加载完成，更新表单:', newCacheInfo.cachePath)
+    console.log('[NpmConfigModal] 缓存信息更新，更新表单:', newCacheInfo.cachePath)
+  }
+}, { deep: true })
+
+// 监听 mirrors 变化，重新匹配镜像源
+watch(() => props.mirrors, (newMirrors) => {
+  if (newMirrors && newMirrors.length > 0 && form.value.registry && props.show) {
+    const currentMirror = newMirrors.find(m => m.url === form.value.registry)
+    if (currentMirror) {
+      form.value.selectedMirror = currentMirror.name
+      console.log('[NpmConfigModal] mirrors 更新，重新匹配镜像源:', currentMirror.name)
+    }
   }
 }, { deep: true })
 

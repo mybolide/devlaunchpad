@@ -16,7 +16,7 @@ const {
   showConfigModal,
   availableMirrors,
   toolCategoryMap,
-  openToolConfig,
+  openToolConfig: originalOpenToolConfig,
   refreshToolInfo
 } = useToolsData()
 
@@ -61,6 +61,25 @@ const {
   getYarnStatus,
   handleYarnSave
 } = useYarnHandlers(refreshToolInfo)
+
+// 增强的打开配置函数 - 预加载数据
+async function openToolConfig(toolName: string) {
+  // 先调用原始的打开函数
+  await originalOpenToolConfig(toolName)
+  
+  // 根据工具类型预加载数据
+  if (toolName === 'npm') {
+    await Promise.all([
+      loadNpmCacheInfo(),
+      getNpmStatus()
+    ])
+  } else if (toolName === 'yarn') {
+    await Promise.all([
+      loadYarnCacheInfo(),
+      getYarnStatus()
+    ])
+  }
+}
 
 // 初始化
 onMounted(() => {

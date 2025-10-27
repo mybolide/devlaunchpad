@@ -1,7 +1,7 @@
 <template>
   <n-modal
     v-model:show="visible"
-    title="pnpm 配置"
+    title="yarn 配置"
     style="width: 700px"
     :mask-closable="!saving"
     :closable="!saving"
@@ -32,6 +32,41 @@
                   type="text"
                   placeholder="或手动输入镜像源地址"
                 />
+              </n-form-item>
+
+              <!-- 测速功能 -->
+              <n-form-item label="测试速度">
+                <n-space vertical style="width: 100%">
+                  <n-space>
+                    <n-button
+                      :loading="pingLoading"
+                      :disabled="!form.registry"
+                      @click="testRegistry(form.registry)"
+                    >
+                      测试当前源
+                    </n-button>
+                    <n-button
+                      :loading="pingLoading"
+                      @click="testRegistry()"
+                    >
+                      测试默认源
+                    </n-button>
+                  </n-space>
+                  
+                  <n-card v-if="pingResult" :bordered="false" size="small" style="background: #f5f5f5">
+                    <n-space align="center">
+                      <n-tag :type="pingResult.success ? 'success' : 'error'" size="small">
+                        {{ pingResult.success ? '✓ 连接成功' : '✗ 连接失败' }}
+                      </n-tag>
+                      <n-text v-if="pingResult.success" strong>
+                        响应时间：{{ pingResult.duration }}ms
+                      </n-text>
+                      <n-text v-else depth="3" style="font-size: 12px">
+                        {{ pingResult.message }}
+                      </n-text>
+                    </n-space>
+                  </n-card>
+                </n-space>
               </n-form-item>
             </n-form>
           </n-tab-pane>
@@ -72,29 +107,88 @@
                 <n-input
                   v-model:value="form.cacheDir"
                   type="text"
-                  placeholder="例如：C:\pnpm-cache"
+                  placeholder="例如：C:\yarn-cache"
                 />
               </n-form-item>
+
+              <n-divider style="margin: 12px 0" />
+              
+              <n-spin :show="cacheLoading">
+                <n-space vertical style="width: 100%">
+                  <n-card v-if="cacheInfo" :bordered="false" size="small" style="background: #f5f5f5">
+                    <n-space vertical>
+                      <n-space align="center">
+                        <n-text strong>当前路径：</n-text>
+                        <n-text code>{{ cacheInfo.cachePath }}</n-text>
+                      </n-space>
+                      <n-space align="center">
+                        <n-text strong>占用空间：</n-text>
+                        <n-text type="info" strong style="font-size: 18px">
+                          {{ cacheInfo.sizeFormatted }}
+                        </n-text>
+                      </n-space>
+                    </n-space>
+                  </n-card>
+
+                  <n-space>
+                    <n-button
+                      type="warning"
+                      :loading="cacheLoading"
+                      @click="$emit('cleanCache')"
+                    >
+                      清理缓存
+                    </n-button>
+                    <n-button
+                      :loading="cacheLoading"
+                      @click="$emit('loadCacheInfo')"
+                    >
+                      刷新信息
+                    </n-button>
+                  </n-space>
+
+                  <n-text depth="3" style="font-size: 12px">
+                    ⚠️ 清理缓存会执行 <n-text code>yarn cache clean</n-text>
+                  </n-text>
+                </n-space>
+              </n-spin>
             </n-form>
           </n-tab-pane>
         </n-tabs>
       </n-spin>
+      
+      <template #footer>
+        <n-space justify="end">
+          <n-button type="primary" @click="handleSave" :loading="saving" :disabled="saving">
+            {{ saving ? '保存中...' : '保存配置' }}
+          </n-button>
+          <n-button @click="handleClose" :disabled="saving">关闭</n-button>
+        </n-space>
+      </template>
     </n-card>
-
-    <template #footer>
-      <n-space justify="end">
-        <n-button type="primary" @click="handleSave" :loading="saving" :disabled="saving">
-          {{ saving ? '保存中...' : '保存配置' }}
-        </n-button>
-        <n-button @click="handleClose" :disabled="saving">关闭</n-button>
-      </n-space>
-    </template>
   </n-modal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { 
+  NModal, 
+  NCard, 
+  NSpin, 
+  NTabs, 
+  NTabPane, 
+  NForm, 
+  NFormItem, 
+  NSpace, 
+  NText, 
+  NButton, 
+  NSelect, 
+  NInput, 
+  NRadioGroup, 
+  NRadio, 
+  NDivider, 
+  NTag,
+  useMessage 
+} from 'naive-ui'
 
 const message = useMessage()
 
@@ -104,12 +198,17 @@ const props = defineProps<{
   toolInfo: any
   mirrors: any[]
   globalProxyUrl: string
+  cacheInfo: any
+  cacheLoading: boolean
 }>()
 
 // Emits
 const emit = defineEmits<{
   'update:show': [value: boolean]
   save: [config: any]
+  cleanCache: []
+  loadCacheInfo: []
+  loadStatus: []
 }>()
 
 // 状态
@@ -121,6 +220,8 @@ const visible = computed({
 const activeTab = ref('registry')
 const loading = ref(false)
 const saving = ref(false)
+const pingLoading = ref(false)
+const pingResult = ref<any>(null)
 
 // 表单数据
 const form = ref({
@@ -143,6 +244,10 @@ watch(() => props.show, async (newVal) => {
     form.value.customProxy = props.toolInfo.customProxy || ''
     
     loading.value = false
+    
+    // 异步加载额外信息
+    emit('loadCacheInfo')
+    emit('loadStatus')
   }
 })
 
@@ -151,6 +256,24 @@ function handleMirrorChange(mirrorName: string) {
   const mirror = props.mirrors.find(m => m.name === mirrorName)
   if (mirror) {
     form.value.registry = mirror.registryUrl
+  }
+}
+
+// 测试镜像源
+async function testRegistry(url?: string) {
+  if (!window.electronAPI) return
+  
+  try {
+    pingLoading.value = true
+    pingResult.value = null
+    
+    const result = await window.electronAPI.invoke('yarn:testRegistry', url)
+    
+    pingResult.value = result
+  } catch (error: any) {
+    message.error('测试失败: ' + error.message)
+  } finally {
+    pingLoading.value = false
   }
 }
 
@@ -182,3 +305,8 @@ defineExpose({
   updateForm: (data: any) => { Object.assign(form.value, data) }
 })
 </script>
+
+<style scoped>
+/* 组件样式 */
+</style>
+

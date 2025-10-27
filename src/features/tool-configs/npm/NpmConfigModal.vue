@@ -1,7 +1,7 @@
 <template>
   <n-modal
     v-model:show="visible"
-    title="yarn 配置"
+    title="npm 配置"
     style="width: 700px"
     :mask-closable="!saving"
     :closable="!saving"
@@ -13,6 +13,39 @@
           <!-- 镜像源配置 -->
           <n-tab-pane name="registry" tab="📦 镜像源">
             <n-form label-placement="left" label-width="100px" style="margin-top: 12px">
+              <!-- npm 配置状态提示 -->
+              <n-alert 
+                v-if="npmStatus?.hasGlobalConfig || Object.keys(npmStatus?.envVars || {}).length > 0"
+                type="warning" 
+                title="⚠️ 检测到配置问题"
+                style="margin-bottom: 16px"
+              >
+                <n-space vertical size="small">
+                  <template v-if="Object.keys(npmStatus?.envVars || {}).length > 0">
+                    <n-text>检测到环境变量覆盖了配置：</n-text>
+                    <n-space vertical size="small" style="margin-left: 12px">
+                      <n-text
+                        v-for="(value, key) in npmStatus.envVars"
+                        :key="key"
+                        depth="3"
+                        style="font-size: 12px"
+                      >
+                        • {{ key }}: <n-text code>{{ value }}</n-text>
+                      </n-text>
+                    </n-space>
+                    <n-text depth="3" style="font-size: 12px">
+                      环境变量会覆盖配置文件，建议在系统中删除这些环境变量后重启应用。
+                    </n-text>
+                  </template>
+                  <template v-if="npmStatus?.hasGlobalConfig">
+                    <n-text>检测到 global 级别的配置，建议清空后使用 user 配置。</n-text>
+                  </template>
+                  <n-button size="small" type="error" @click="$emit('clearGlobalConfig')" style="margin-top: 8px">
+                    🧹 一键清空 Global 配置
+                  </n-button>
+                </n-space>
+              </n-alert>
+
               <n-form-item label="选择镜像源">
                 <n-select
                   v-model:value="form.selectedMirror"
@@ -107,7 +140,7 @@
                 <n-input
                   v-model:value="form.cacheDir"
                   type="text"
-                  placeholder="例如：C:\yarn-cache"
+                  placeholder="例如：C:\npm-cache"
                 />
               </n-form-item>
 
@@ -136,7 +169,7 @@
                       :loading="cacheLoading"
                       @click="$emit('cleanCache')"
                     >
-                      清理缓存
+                      清理并校验缓存
                     </n-button>
                     <n-button
                       :loading="cacheLoading"
@@ -147,7 +180,7 @@
                   </n-space>
 
                   <n-text depth="3" style="font-size: 12px">
-                    ⚠️ 清理缓存会执行 <n-text code>yarn cache clean</n-text>
+                    ⚠️ 清理缓存会执行 <n-text code>npm cache clean --force && npm cache verify</n-text>
                   </n-text>
                 </n-space>
               </n-spin>
@@ -155,22 +188,41 @@
           </n-tab-pane>
         </n-tabs>
       </n-spin>
+      
+      <template #footer>
+        <n-space justify="end">
+          <n-button type="primary" @click="handleSave" :loading="saving" :disabled="saving">
+            {{ saving ? '保存中...' : '保存配置' }}
+          </n-button>
+          <n-button @click="handleClose" :disabled="saving">关闭</n-button>
+        </n-space>
+      </template>
     </n-card>
-
-    <template #footer>
-      <n-space justify="end">
-        <n-button type="primary" @click="handleSave" :loading="saving" :disabled="saving">
-          {{ saving ? '保存中...' : '保存配置' }}
-        </n-button>
-        <n-button @click="handleClose" :disabled="saving">关闭</n-button>
-      </n-space>
-    </template>
   </n-modal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { 
+  NModal, 
+  NCard, 
+  NSpin, 
+  NTabs, 
+  NTabPane, 
+  NForm, 
+  NFormItem, 
+  NAlert, 
+  NSpace, 
+  NText, 
+  NButton, 
+  NSelect, 
+  NInput, 
+  NRadioGroup, 
+  NRadio, 
+  NDivider, 
+  NTag,
+  useMessage 
+} from 'naive-ui'
 
 const message = useMessage()
 
@@ -180,6 +232,7 @@ const props = defineProps<{
   toolInfo: any
   mirrors: any[]
   globalProxyUrl: string
+  npmStatus: any
   cacheInfo: any
   cacheLoading: boolean
 }>()
@@ -188,6 +241,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:show': [value: boolean]
   save: [config: any]
+  clearGlobalConfig: []
   cleanCache: []
   loadCacheInfo: []
   loadStatus: []
@@ -217,13 +271,33 @@ const form = ref({
 // 监听弹窗打开，加载配置
 watch(() => props.show, async (newVal) => {
   if (newVal && props.toolInfo) {
+    console.log('[NpmConfigModal] 弹窗打开，toolInfo:', props.toolInfo)
+    console.log('[NpmConfigModal] 可用镜像源:', props.mirrors)
+    console.log('[NpmConfigModal] 缓存信息:', props.cacheInfo)
+    
     loading.value = true
     
     // 加载表单数据
-    form.value.registry = props.toolInfo.registry || ''
-    form.value.cacheDir = props.toolInfo.cacheDir || ''
-    form.value.proxyType = props.toolInfo.proxyType || 'none'
-    form.value.customProxy = props.toolInfo.customProxy || ''
+    form.value.registry = props.toolInfo.registryUrl || ''
+    form.value.cacheDir = props.cacheInfo?.cachePath || props.toolInfo.cacheDir || ''
+    form.value.proxyType = props.toolInfo.proxyEnabled ? 'custom' : 'none'
+    form.value.customProxy = props.toolInfo.currentProxy || ''
+    
+    // 根据当前 registry 找到对应的镜像源
+    if (form.value.registry && props.mirrors.length > 0) {
+      const currentMirror = props.mirrors.find(m => m.url === form.value.registry)
+      if (currentMirror) {
+        form.value.selectedMirror = currentMirror.name
+        console.log('[NpmConfigModal] 找到匹配的镜像源:', currentMirror.name)
+      } else {
+        form.value.selectedMirror = ''
+        console.log('[NpmConfigModal] 未找到匹配的镜像源，使用自定义地址')
+      }
+    } else {
+      form.value.selectedMirror = ''
+    }
+    
+    console.log('[NpmConfigModal] 初始化表单数据:', form.value)
     
     loading.value = false
     
@@ -233,11 +307,23 @@ watch(() => props.show, async (newVal) => {
   }
 })
 
+// 监听缓存信息变化，更新表单中的缓存目录
+watch(() => props.cacheInfo, (newCacheInfo) => {
+  if (newCacheInfo && newCacheInfo.cachePath && props.show) {
+    // 当缓存信息加载完成后，总是更新到表单中（显示当前实际的缓存路径）
+    form.value.cacheDir = newCacheInfo.cachePath
+    console.log('[NpmConfigModal] 缓存信息加载完成，更新表单:', newCacheInfo.cachePath)
+  }
+}, { deep: true })
+
 // 镜像源选择
 function handleMirrorChange(mirrorName: string) {
+  console.log('[handleMirrorChange] 选择镜像源:', mirrorName)
   const mirror = props.mirrors.find(m => m.name === mirrorName)
+  console.log('[handleMirrorChange] 找到镜像源:', mirror)
   if (mirror) {
-    form.value.registry = mirror.registryUrl
+    form.value.registry = mirror.url
+    console.log('[handleMirrorChange] 设置 registry:', form.value.registry)
   }
 }
 
@@ -249,7 +335,7 @@ async function testRegistry(url?: string) {
     pingLoading.value = true
     pingResult.value = null
     
-    const result = await window.electronAPI.invoke('yarn:testRegistry', url)
+    const result = await window.electronAPI.invoke('npm:testRegistry', url)
     
     pingResult.value = result
   } catch (error: any) {
@@ -261,6 +347,10 @@ async function testRegistry(url?: string) {
 
 // 保存配置
 function handleSave() {
+  console.log('[NpmConfigModal] 点击保存，当前表单数据:', {
+    tab: activeTab.value,
+    form: form.value
+  })
   emit('save', {
     tab: activeTab.value,
     form: form.value

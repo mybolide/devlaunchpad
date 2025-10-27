@@ -96,6 +96,5 @@ export { default as YarnConfigModal } from './yarn/index.js'
 export * from './shared/components/index.js'
 export * from './shared/composables/index.js'
 
-// 导出类型
-export type * from './types.js'
+// 类型已在本文件第 7 行导出：export interface ToolConfigModule
 

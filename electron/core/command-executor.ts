@@ -18,6 +18,7 @@ export class CommandExecutor {
 
   /**
    * 同步执行命令（实际上是 Promise 包装的异步执行）
+   * 【性能优化】避免不必要的环境变量拷贝
    */
   async execute(
     command: string[],
@@ -32,6 +33,11 @@ export class CommandExecutor {
     console.log(`[CommandExecutor] 执行命令: ${commandStr}`)
     const startTime = Date.now()
 
+    // 【性能优化】只在需要自定义环境变量时才合并
+    const execEnv = options?.env 
+      ? { ...process.env, ...options.env }  // 有自定义环境变量，合并
+      : process.env  // 无自定义环境变量，直接使用（避免拷贝）
+
     return new Promise((resolve) => {
       try {
         const child = execFile(cmd, args, {
@@ -39,7 +45,7 @@ export class CommandExecutor {
           encoding: 'utf-8',
           maxBuffer: 10 * 1024 * 1024, // 10MB
           shell: true, // Windows 需要 shell
-          env: { ...process.env, ...options?.env }
+          env: execEnv
         }, (error, stdout, stderr) => {
           const executionTime = Date.now() - startTime
 

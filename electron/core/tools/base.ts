@@ -64,10 +64,37 @@ export interface IToolModule {
 /**
  * 工具模块基类
  * 提供基于配置的默认实现，子类可以覆盖特殊逻辑
+ * 【性能优化】添加短期缓存避免重复命令执行
  */
 export abstract class ToolModuleBase implements IToolModule {
   /** 工具配置（子类必须提供） */
   abstract readonly config: Tool
+
+  /** 【性能优化】命令结果缓存（5秒TTL，保持实时性） */
+  private cache = new Map<string, { value: any; timestamp: number }>()
+  private readonly CACHE_TTL = 5000 // 5秒缓存，避免频繁执行
+
+  /**
+   * 【性能优化】缓存辅助方法
+   * 如果缓存存在且未过期则返回缓存，否则执行函数并缓存结果
+   */
+  private async getCached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const cached = this.cache.get(key)
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.value as T
+    }
+    
+    const value = await fn()
+    this.cache.set(key, { value, timestamp: Date.now() })
+    return value
+  }
+
+  /**
+   * 【性能优化】清除缓存（配置变更时调用）
+   */
+  protected clearCache(): void {
+    this.cache.clear()
+  }
 
   /**
    * 检测工具是否已安装
@@ -207,6 +234,9 @@ export abstract class ToolModuleBase implements IToolModule {
         }
       }
 
+      // 【性能优化】代理配置变更后清除缓存
+      this.clearCache()
+
       return {
         toolName: this.config.name,
         success: true,
@@ -260,6 +290,9 @@ export abstract class ToolModuleBase implements IToolModule {
         }
       }
 
+      // 【性能优化】代理配置变更后清除缓存
+      this.clearCache()
+
       return {
         toolName: this.config.name,
         success: true,
@@ -277,35 +310,58 @@ export abstract class ToolModuleBase implements IToolModule {
   /**
    * 获取工具的完整信息
    * 默认实现：调用各个检测方法
+   * 【性能优化】使用缓存避免重复命令执行，并行执行多个检测
    */
   async getInfo(): Promise<ToolInfo> {
     try {
       console.log(`[${this.config.name}] 开始检测工具信息`)
+      const startTime = Date.now()
       
-      const installed = await this.isInstalled()
+      // 【性能优化】使用缓存的版本检测（避免重复执行 checkCmd）
+      const checkResult = await this.getCached('checkCmd', async () => {
+        return await commandExecutor.execute(this.config.checkCmd, 5000)
+      })
+      
+      const installed = checkResult.success
       console.log(`[${this.config.name}] 安装状态: ${installed}`)
 
-      const version = installed ? await this.getVersion() : undefined
+      // 【性能优化】从缓存的结果中提取版本信息，无需再次执行命令
+      const version = installed ? filterValue(checkResult.stdout.trim().split('\n')[0]) : undefined
       if (installed && version) {
         console.log(`[${this.config.name}] 版本: ${version}`)
       }
 
-      const proxyEnabled = installed && (await this.isProxyEnabled())
-      const currentProxy = installed ? await this.getCurrentProxy() : undefined
+      // 【性能优化】如果工具已安装，并行执行所有配置检测
+      let proxyEnabled = false
+      let currentProxy: string | undefined
+      let registryUrl: string | undefined
+      let cacheDir: string | undefined
 
-      if (installed && proxyEnabled && currentProxy) {
-        console.log(`[${this.config.name}] 代理: ${currentProxy}`)
+      if (installed) {
+        const [proxy, registry, cache] = await Promise.all([
+          this.getCurrentProxy(),
+          this.getCurrentRegistry(),
+          this.getCurrentCacheDir()
+        ])
+        
+        currentProxy = proxy
+        registryUrl = registry
+        cacheDir = cache
+        proxyEnabled = proxy !== undefined && proxy.length > 0
+
+        if (proxyEnabled && currentProxy) {
+          console.log(`[${this.config.name}] 代理: ${currentProxy}`)
+        }
+        if (registryUrl) {
+          console.log(`[${this.config.name}] 镜像源: ${registryUrl}`)
+        }
+        if (cacheDir) {
+          console.log(`[${this.config.name}] 缓存目录: ${cacheDir}`)
+        }
       }
 
-      const registryUrl = installed ? await this.getCurrentRegistry() : undefined
-      if (installed && registryUrl) {
-        console.log(`[${this.config.name}] 镜像源: ${registryUrl}`)
-      }
-
-      const cacheDir = installed ? await this.getCurrentCacheDir() : undefined
-      if (installed && cacheDir) {
-        console.log(`[${this.config.name}] 缓存目录: ${cacheDir}`)
-      }
+      const duration = Date.now() - startTime
+      console.log(`[${this.config.name}] ✓ 检测完成 (${duration}ms)`)
 
       return {
         name: this.config.name,

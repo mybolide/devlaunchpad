@@ -89,13 +89,13 @@ export function getToolsByCategory(category: string): string[] {
 }
 
 // 统一导出配置组件（用于直接导入）
-export { default as NpmConfigModal } from './npm/NpmConfigModal.vue'
-export { default as YarnConfigModal } from './yarn/YarnConfigModal.vue'
+export { default as NpmConfigModal } from './npm/index.js'
+export { default as YarnConfigModal } from './yarn/index.js'
 
 // 导出共享组件
-export * from './shared/components'
-export * from './shared/composables'
+export * from './shared/components/index.js'
+export * from './shared/composables/index.js'
 
 // 导出类型
-export type * from './types'
+export type * from './types.js'
 

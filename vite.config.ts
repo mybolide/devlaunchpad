@@ -37,9 +37,11 @@ export default defineConfig({
             }
           }
         },
-        onstart() {
+        onstart(args) {
           // 开发模式：每次启动前复制 preload.js
           copyPreloadFile()
+          // 启动 Electron
+          args.startup()
         }
       }
     ]),
